@@ -83,12 +83,19 @@ class PipeWireEngine : public AudioEngine {
   void connectContext();
   void disconnectContext();
 
-  void addOrUpdateNode(uint32_t id, const spa_dict* props);
+  void addOrUpdateNode(uint32_t id,
+                       const QString& name,
+                       const QString& description,
+                       AudioDeviceType type,
+                       int cardId,
+                       const QString& profileName);
   void removeNode(uint32_t id);
   void bindNode(uint32_t id);
   void unbindNode(uint32_t id);
   void bindMetadata(uint32_t id);
   void unbindMetadata(uint32_t id);
+  void applyNodeParamUpdate(uint32_t nodeId, bool hasVolume, float volume, bool hasMute, bool mute);
+  void applyNodeDisabledUpdate(uint32_t nodeId, bool disabled);
 
   void queryNodeVolume(uint32_t nodeId);
   void setNodeVolume(uint32_t nodeId, float volume);

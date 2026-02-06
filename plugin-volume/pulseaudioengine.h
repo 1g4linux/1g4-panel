@@ -35,6 +35,11 @@ class PulseAudioEngine : public AudioEngine {
   void requestSinkInfoUpdate(uint32_t idx);
   void removeSink(uint32_t idx);
   void addOrUpdateSink(const pa_sink_info* info);
+  void addOrUpdateSinkSnapshot(const QString& name,
+                               uint32_t index,
+                               const QString& description,
+                               bool mute,
+                               pa_cvolume cvolume);
 
   pa_context_state_t contextState() const { return m_contextState; }
   bool ready() const { return m_ready; }

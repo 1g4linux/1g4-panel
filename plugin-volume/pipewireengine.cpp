@@ -5,6 +5,8 @@
 #include "pipewireengine.h"
 #include "audiodevice.h"
 
+#include <QMetaObject>
+#include <QPointer>
 #include <QtDebug>
 #include <QtGlobal>
 
@@ -268,8 +270,20 @@ void PipeWireEngine::onCoreError(void* data, uint32_t id, int seq, int res, cons
   Q_UNUSED(res);
 
   auto* engine = static_cast<PipeWireEngine*>(data);
+  if (!engine) {
+    return;
+  }
   qWarning() << "PipeWireEngine: core error" << message;
-  engine->setReady(false);
+  QPointer<PipeWireEngine> enginePtr(engine);
+  QMetaObject::invokeMethod(
+      engine,
+      [enginePtr]() {
+        if (!enginePtr) {
+          return;
+        }
+        enginePtr->setReady(false);
+      },
+      Qt::QueuedConnection);
 }
 
 // static
@@ -283,15 +297,28 @@ void PipeWireEngine::onRegistryGlobal(void* data,
   Q_UNUSED(version);
 
   auto* engine = static_cast<PipeWireEngine*>(data);
-  if (!engine || !props)
+  if (!engine)
     return;
 
+  QPointer<PipeWireEngine> enginePtr(engine);
+
   if (strcmp(type, PW_TYPE_INTERFACE_Metadata) == 0) {
-    engine->bindMetadata(id);
+    QMetaObject::invokeMethod(
+        engine,
+        [enginePtr, id]() {
+          if (!enginePtr) {
+            return;
+          }
+          enginePtr->bindMetadata(id);
+        },
+        Qt::QueuedConnection);
     return;
   }
 
   if (strcmp(type, PW_TYPE_INTERFACE_Node) != 0)
+    return;
+
+  if (!props)
     return;
 
   const char* mediaClass = spa_dict_lookup(props, PW_KEY_MEDIA_CLASS);
@@ -303,7 +330,36 @@ void PipeWireEngine::onRegistryGlobal(void* data,
   if (!isSink && !isSource)
     return;
 
-  engine->addOrUpdateNode(id, props);
+  const char* name = spa_dict_lookup(props, PW_KEY_NODE_NAME);
+  const char* desc = spa_dict_lookup(props, PW_KEY_NODE_DESCRIPTION);
+
+  const QString qname = QString::fromUtf8(name ? name : "");
+  const QString qdesc = QString::fromUtf8(desc ? desc : "");
+  const AudioDeviceType devType = isSource ? Source : Sink;
+
+  int cardId = -1;
+  if (const char* card = spa_dict_lookup(props, PW_KEY_DEVICE_ID)) {
+    bool ok = false;
+    cardId = QString::fromUtf8(card).toInt(&ok);
+    if (!ok) {
+      cardId = -1;
+    }
+  }
+
+  QString profileName;
+  if (const char* profile = spa_dict_lookup(props, "device.profile.name")) {
+    profileName = QString::fromUtf8(profile);
+  }
+
+  QMetaObject::invokeMethod(
+      engine,
+      [enginePtr, id, qname, qdesc, devType, cardId, profileName]() {
+        if (!enginePtr) {
+          return;
+        }
+        enginePtr->addOrUpdateNode(id, qname, qdesc, devType, cardId, profileName);
+      },
+      Qt::QueuedConnection);
 }
 
 // static
@@ -312,12 +368,20 @@ void PipeWireEngine::onRegistryGlobalRemove(void* data, uint32_t id) {
   if (!engine)
     return;
 
-  if (engine->m_metadataId == id) {
-    engine->unbindMetadata(id);
-    return;
-  }
-
-  engine->removeNode(id);
+  QPointer<PipeWireEngine> enginePtr(engine);
+  QMetaObject::invokeMethod(
+      engine,
+      [enginePtr, id]() {
+        if (!enginePtr) {
+          return;
+        }
+        if (enginePtr->m_metadataId == id) {
+          enginePtr->unbindMetadata(id);
+          return;
+        }
+        enginePtr->removeNode(id);
+      },
+      Qt::QueuedConnection);
 }
 
 // static
@@ -336,31 +400,28 @@ int PipeWireEngine::onMetadataProperty(void* data,
     return 0;
 
   const bool disabled = value && strcmp(value, "true") == 0;
-  if (disabled)
-    engine->m_disabledNodeIds.insert(subject);
-  else
-    engine->m_disabledNodeIds.remove(subject);
-
-  AudioDevice* dev = engine->m_deviceByWpId.value(subject, nullptr);
-  if (dev)
-    engine->setNodeEnabledState(dev, !disabled);
+  QPointer<PipeWireEngine> enginePtr(engine);
+  QMetaObject::invokeMethod(
+      engine,
+      [enginePtr, subject, disabled]() {
+        if (!enginePtr) {
+          return;
+        }
+        enginePtr->applyNodeDisabledUpdate(subject, disabled);
+      },
+      Qt::QueuedConnection);
   return 0;
 }
 
-void PipeWireEngine::addOrUpdateNode(uint32_t id, const spa_dict* props) {
-  const char* name = spa_dict_lookup(props, PW_KEY_NODE_NAME);
-  const char* desc = spa_dict_lookup(props, PW_KEY_NODE_DESCRIPTION);
-  const char* mediaClass = spa_dict_lookup(props, PW_KEY_MEDIA_CLASS);
-
-  QString qname = QString::fromUtf8(name ? name : "");
-  QString qdesc = QString::fromUtf8(desc ? desc : "");
-  AudioDeviceType type = Sink;
-  if (mediaClass && strcmp(mediaClass, "Audio/Source") == 0)
-    type = Source;
-
+void PipeWireEngine::addOrUpdateNode(uint32_t id,
+                                     const QString& qname,
+                                     const QString& qdesc,
+                                     AudioDeviceType type,
+                                     int cardId,
+                                     const QString& profileName) {
   const bool isBluetooth = qname.contains(QLatin1String("bluez"), Qt::CaseInsensitive);
   qDebug() << "PipeWireEngine: addOrUpdateNode id" << id << "name:" << qname << "desc:" << qdesc
-           << "mediaClass:" << (mediaClass ? mediaClass : "") << (isBluetooth ? "[Bluetooth]" : "");
+           << "mediaClass:" << (type == Sink ? "Audio/Sink" : "Audio/Source") << (isBluetooth ? "[Bluetooth]" : "");
 
   AudioDevice* dev = m_deviceByWpId.value(id, nullptr);
   bool newDevice = (dev == nullptr);
@@ -380,17 +441,10 @@ void PipeWireEngine::addOrUpdateNode(uint32_t id, const spa_dict* props) {
   dev->setName(qname);
   dev->setIndex(id);
   dev->setDescription(qdesc);
-  const char* card = spa_dict_lookup(props, PW_KEY_DEVICE_ID);
-  const char* profile = spa_dict_lookup(props, "device.profile.name");
-  if (card) {
-    bool ok = false;
-    const int cardId = QString::fromUtf8(card).toInt(&ok);
-    if (ok) {
-      dev->setCardId(cardId);
-    }
+  if (cardId >= 0) {
+    dev->setCardId(cardId);
   }
-  if (profile) {
-    const QString profileName = QString::fromUtf8(profile);
+  if (!profileName.isEmpty()) {
     dev->setProfileName(profileName);
   }
   const bool disabled = m_disabledNodeIds.contains(id);
@@ -453,8 +507,6 @@ void PipeWireEngine::removeNode(uint32_t id) {
     return;
 
   m_nodeIdByDevice.remove(dev);
-  dev->setEnabled(false);
-  dev->setVolumeNoCommit(0);
 
   // Remove from m_sinks if it's a sink
   if (dev->type() == Sink) {
@@ -466,6 +518,7 @@ void PipeWireEngine::removeNode(uint32_t id) {
   }
 
   unbindNode(id);
+  delete dev;
 }
 
 void PipeWireEngine::bindNode(uint32_t id) {
@@ -615,15 +668,6 @@ void PipeWireEngine::onNodeParams(void* data,
   PipeWireEngine* engine = ctx->engine;
   uint32_t nodeId = ctx->nodeId;
 
-  // Debug logging for node param updates
-  AudioDevice* debugDevice = engine->m_deviceByWpId.value(nodeId, nullptr);
-  if (debugDevice) {
-    const QString devName = debugDevice->name();
-    const bool isBluetooth = devName.contains(QLatin1String("bluez"), Qt::CaseInsensitive);
-    qDebug() << "PipeWireEngine: onNodeParams node" << nodeId << "device" << devName
-             << (isBluetooth ? "[Bluetooth]" : "") << "paramId" << paramId;
-  }
-
   if (param->type != SPA_TYPE_Object) {
     return;
   }
@@ -633,46 +677,88 @@ void PipeWireEngine::onNodeParams(void* data,
     return;
   }
 
-  AudioDevice* device = nullptr;
-  for (AudioDevice* dev : std::as_const(engine->m_sinks)) {
-    if (engine->m_nodeIdByDevice.value(dev) == nodeId) {
-      device = dev;
-      break;
-    }
-  }
-
-  if (!device)
-    return;
-
   auto* mutableObj = reinterpret_cast<spa_pod_object*>(const_cast<spa_pod*>(param));
   spa_pod_prop* prop;
+
+  bool hasVolume = false;
+  float volume = 0.0f;
+  bool hasMute = false;
+  bool mute = false;
 
   SPA_POD_OBJECT_FOREACH(mutableObj, prop) {
     switch (prop->key) {
       case SPA_PROP_volume: {
-        float volume = 0.0f;
-        if (spa_pod_get_float(&prop->value, &volume) == 0) {
-          int percent = static_cast<int>(volume * 100.0f);
-          device->setVolumeNoCommit(percent);
-          const QString devName = device->name();
-          const bool isBluetooth = devName.contains(QLatin1String("bluez"), Qt::CaseInsensitive);
-          qDebug() << "PipeWireEngine: node" << nodeId << "device" << devName << (isBluetooth ? "[Bluetooth]" : "")
-                   << "volume updated to" << volume << "(" << percent << "%)";
+        float v = 0.0f;
+        if (spa_pod_get_float(&prop->value, &v) == 0) {
+          hasVolume = true;
+          volume = v;
         }
         break;
       }
       case SPA_PROP_mute: {
-        bool mute = false;
-        if (spa_pod_get_bool(&prop->value, &mute) == 0) {
-          device->setMuteNoCommit(mute);
-          const QString devName = device->name();
-          const bool isBluetooth = devName.contains(QLatin1String("bluez"), Qt::CaseInsensitive);
-          qDebug() << "PipeWireEngine: node" << nodeId << "device" << devName << (isBluetooth ? "[Bluetooth]" : "")
-                   << "mute updated to" << mute;
+        bool m = false;
+        if (spa_pod_get_bool(&prop->value, &m) == 0) {
+          hasMute = true;
+          mute = m;
         }
         break;
       }
     }
+  }
+
+  if (!hasVolume && !hasMute) {
+    return;
+  }
+
+  QPointer<PipeWireEngine> enginePtr(engine);
+  QMetaObject::invokeMethod(
+      engine,
+      [enginePtr, nodeId, paramId, hasVolume, volume, hasMute, mute]() {
+        if (!enginePtr) {
+          return;
+        }
+        enginePtr->applyNodeParamUpdate(nodeId, hasVolume, volume, hasMute, mute);
+
+        // Debug logging for node param updates
+        const AudioDevice* dev = enginePtr->m_deviceByWpId.value(nodeId, nullptr);
+        if (!dev) {
+          return;
+        }
+        const bool isBluetooth = dev->name().contains(QLatin1String("bluez"), Qt::CaseInsensitive);
+        qDebug() << "PipeWireEngine: onNodeParams node" << nodeId << "device" << dev->name()
+                 << (isBluetooth ? "[Bluetooth]" : "") << "paramId" << paramId;
+      },
+      Qt::QueuedConnection);
+}
+
+void PipeWireEngine::applyNodeParamUpdate(uint32_t nodeId, bool hasVolume, float volume, bool hasMute, bool mute) {
+  AudioDevice* device = m_deviceByWpId.value(nodeId, nullptr);
+  if (!device) {
+    return;
+  }
+
+  if (hasVolume) {
+    int percent = static_cast<int>(volume * 100.0f);
+    percent = std::clamp(percent, 0, 100);
+    device->setVolumeNoCommit(percent);
+  }
+
+  if (hasMute) {
+    device->setMuteNoCommit(mute);
+  }
+}
+
+void PipeWireEngine::applyNodeDisabledUpdate(uint32_t nodeId, bool disabled) {
+  if (disabled) {
+    m_disabledNodeIds.insert(nodeId);
+  }
+  else {
+    m_disabledNodeIds.remove(nodeId);
+  }
+
+  AudioDevice* dev = m_deviceByWpId.value(nodeId, nullptr);
+  if (dev) {
+    setNodeEnabledState(dev, !disabled);
   }
 }
 

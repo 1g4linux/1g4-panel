@@ -6,7 +6,9 @@
 
 #include "audiodevice.h"
 
+#include <QMetaObject>
 #include <QMetaType>
+#include <QPointer>
 #include <QtDebug>
 
 #include <cmath>
@@ -30,7 +32,24 @@ static void sinkInfoCallback(pa_context* context, const pa_sink_info* info, int 
     return;
   }
 
-  pulseEngine->addOrUpdateSink(info);
+  // Callbacks are executed from PulseAudio's internal thread. Queue the UI-model update onto
+  // the engine's Qt thread to avoid cross-thread access to QObjects and m_sinks.
+  const QString name = QString::fromUtf8(info->name ? info->name : "");
+  const QString description = QString::fromUtf8(info->description ? info->description : "");
+  const uint32_t index = info->index;
+  const bool mute = info->mute;
+  const pa_cvolume cvolume = info->volume;
+
+  QPointer<PulseAudioEngine> enginePtr(pulseEngine);
+  QMetaObject::invokeMethod(
+      pulseEngine,
+      [enginePtr, name, index, description, mute, cvolume]() {
+        if (!enginePtr) {
+          return;
+        }
+        enginePtr->addOrUpdateSinkSnapshot(name, index, description, mute, cvolume);
+      },
+      Qt::QueuedConnection);
 }
 
 static void contextEventCallback(pa_context* context, const char* name, pa_proplist* p, void* userdata) {
@@ -98,10 +117,22 @@ static void contextSubscriptionCallback(pa_context* context,
   Q_UNUSED(context);
 
   auto* pulseEngine = static_cast<PulseAudioEngine*>(userdata);
-  if (PA_SUBSCRIPTION_EVENT_REMOVE == t)
-    pulseEngine->removeSink(idx);
-  else
+  const auto eventType = static_cast<pa_subscription_event_type_t>(t & PA_SUBSCRIPTION_EVENT_TYPE_MASK);
+  if (eventType == PA_SUBSCRIPTION_EVENT_REMOVE) {
+    QPointer<PulseAudioEngine> enginePtr(pulseEngine);
+    QMetaObject::invokeMethod(
+        pulseEngine,
+        [enginePtr, idx]() {
+          if (!enginePtr) {
+            return;
+          }
+          enginePtr->removeSink(idx);
+        },
+        Qt::QueuedConnection);
+  }
+  else {
     pulseEngine->requestSinkInfoUpdate(idx);
+  }
 }
 
 PulseAudioEngine::PulseAudioEngine(QObject* parent)
@@ -186,6 +217,47 @@ void PulseAudioEngine::addOrUpdateSink(const pa_sink_info* info) {
   m_cVolumeMap.insert(dev, info->volume);
 
   const pa_volume_t v = pa_cvolume_avg(&(info->volume));
+  // convert real volume to percentage
+  dev->setVolumeNoCommit(std::round((static_cast<double>(v) * 100.0) / m_maximumVolume));
+
+  if (newSink) {
+    // keep the sinks sorted by name
+    m_sinks.insert(std::lower_bound(m_sinks.begin(), m_sinks.end(), dev,
+                                    [](const AudioDevice* a, const AudioDevice* b) { return a->name() < b->name(); }),
+                   dev);
+    emit sinkListChanged();
+  }
+}
+
+void PulseAudioEngine::addOrUpdateSinkSnapshot(const QString& name,
+                                               uint32_t index,
+                                               const QString& description,
+                                               bool mute,
+                                               pa_cvolume cvolume) {
+  AudioDevice* dev = nullptr;
+  bool newSink = false;
+
+  for (AudioDevice* device : std::as_const(m_sinks)) {
+    if (device->name() == name) {
+      dev = device;
+      break;
+    }
+  }
+
+  if (!dev) {
+    dev = new AudioDevice(Sink, this);
+    newSink = true;
+  }
+
+  dev->setName(name);
+  dev->setIndex(index);
+  dev->setDescription(description);
+  dev->setMuteNoCommit(mute);
+
+  // TODO: save separately? alsa does not have it
+  m_cVolumeMap.insert(dev, cvolume);
+
+  const pa_volume_t v = pa_cvolume_avg(&cvolume);
   // convert real volume to percentage
   dev->setVolumeNoCommit(std::round((static_cast<double>(v) * 100.0) / m_maximumVolume));
 
