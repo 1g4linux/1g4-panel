@@ -35,19 +35,18 @@ class OneG4Volume : public QObject, public IOneG4PanelPlugin {
  protected slots:
   virtual void settingsChanged();
   void handleSinkListChanged();
-  void showNotification(bool forceShow) const;
+  void showNotification() const;
   void openMixer();
 
  private:
   AudioEngine* m_engine;
   VolumeButton* m_volumeButton;
-  int m_defaultSinkIndex;
+  uint m_defaultSinkId;
   QPointer<AudioDevice> m_defaultSink;
   OneG4::Notification* m_notification;
   QPointer<OneG4VolumeConfiguration> m_configDialog;
   QPointer<QDialog> m_mixerDialog;
   bool m_alwaysShowNotifications;
-  bool m_showKeyboardNotifications;
 };
 
 class OneG4VolumePluginLibrary : public QObject, public IOneG4PanelPluginLibrary {

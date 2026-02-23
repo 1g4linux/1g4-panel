@@ -5,6 +5,7 @@ cmake_minimum_required(VERSION 3.18.0 FATAL_ERROR)
 # command to specify that the current project code is written for the given range of CMake
 # versions.
 project(1g4-panel)
+include(CTest)
 
 option(WITH_SCREENSAVER_FALLBACK "Include support for converting the deprecated 'screensaver' plugin to 'quicklaunch'. This requires the oneg4-leave (oneg4-session) to be installed in runtime." ON)
 
@@ -299,3 +300,7 @@ add_subdirectory(panel)
 
 # merged from oneg4-common
 add_subdirectory(autostart)
+
+if(BUILD_TESTING)
+    add_subdirectory(tests)
+endif()

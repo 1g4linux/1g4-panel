@@ -13,11 +13,11 @@
 
 #define SETTINGS_MUTE_ON_MIDDLECLICK "showOnMiddleClick"
 #define SETTINGS_DEVICE "device"
+#define SETTINGS_DEVICE_ID_MIGRATION_DONE "deviceIdMigrationDone"
 #define SETTINGS_STEP "volumeAdjustStep"
 #define SETTINGS_IGNORE_MAX_VOLUME "ignoreMaxVolume"
 #define SETTINGS_AUDIO_ENGINE "audioEngine"
 #define SETTINGS_ALWAYS_SHOW_NOTIFICATIONS "alwaysShowNotifications"
-#define SETTINGS_SHOW_KEYBOARD_NOTIFICATIONS "showKeyboardNotifications"
 
 #define SETTINGS_DEFAULT_MUTE_ON_MIDDLECLICK true
 #define SETTINGS_DEFAULT_DEVICE 0
@@ -31,7 +31,6 @@
 #endif
 #define SETTINGS_DEFAULT_IGNORE_MAX_VOLUME true
 #define SETTINGS_DEFAULT_ALWAYS_SHOW_NOTIFICATIONS false
-#define SETTINGS_DEFAULT_SHOW_KEYBOARD_NOTIFICATIONS true
 
 class AudioDevice;
 class QTreeWidgetItem;
@@ -55,7 +54,6 @@ class OneG4VolumeConfiguration : public OneG4PanelPluginConfigDialog {
   void stepSpinBoxChanged(int step);
   void ignoreMaxVolumeCheckBoxChanged(bool state);
   void alwaysShowNotificationsCheckBoxChanged(bool state);
-  void showKeyboardNotificationsCheckBoxChanged(bool state);
   void audioBackendChanged(int index);
   void policyItemChanged(QTreeWidgetItem* item, int column);
   void applyPolicy();

@@ -7,6 +7,7 @@
 #include "audiodevice.h"
 #include "audioengine.h"
 #include "oneg4volumeconfiguration.h"
+#include "sinkselection.h"
 #ifdef USE_PIPEWIRE
 #include "pipewireengine.h"
 #endif
@@ -29,12 +30,11 @@ OneG4Volume::OneG4Volume(const IOneG4PanelPluginStartupInfo& startupInfo)
     : QObject(),
       IOneG4PanelPlugin(startupInfo),
       m_engine(nullptr),
-      m_defaultSinkIndex(0),
+      m_defaultSinkId(0U),
       m_defaultSink(nullptr),
       m_configDialog(nullptr),
       m_mixerDialog(nullptr),
-      m_alwaysShowNotifications(SETTINGS_DEFAULT_ALWAYS_SHOW_NOTIFICATIONS),
-      m_showKeyboardNotifications(SETTINGS_DEFAULT_SHOW_KEYBOARD_NOTIFICATIONS) {
+      m_alwaysShowNotifications(SETTINGS_DEFAULT_ALWAYS_SHOW_NOTIFICATIONS) {
   m_volumeButton = new VolumeButton(this);
 
   m_notification = new OneG4::Notification(QString(), this);
@@ -82,7 +82,8 @@ void OneG4Volume::setAudioEngine(AudioEngine* engine) {
 }
 
 void OneG4Volume::settingsChanged() {
-  m_defaultSinkIndex = settings()->value(QStringLiteral(SETTINGS_DEVICE), SETTINGS_DEFAULT_DEVICE).toInt();
+  m_defaultSinkId =
+      static_cast<uint>(std::max(settings()->value(QStringLiteral(SETTINGS_DEVICE), SETTINGS_DEFAULT_DEVICE).toInt(), 0));
 
   const QString engineName =
       settings()
@@ -106,7 +107,7 @@ void OneG4Volume::settingsChanged() {
       // fallback to first available backend
 #ifdef USE_PULSEAUDIO
       engine = new PulseAudioEngine(this);
-#elif USE_PIPEWIRE
+#elif defined(USE_PIPEWIRE) && USE_PIPEWIRE
       engine = new PipeWireEngine(this);
 #endif
     }
@@ -126,12 +127,6 @@ void OneG4Volume::settingsChanged() {
           ->value(QStringLiteral(SETTINGS_ALWAYS_SHOW_NOTIFICATIONS), SETTINGS_DEFAULT_ALWAYS_SHOW_NOTIFICATIONS)
           .toBool();
 
-  m_showKeyboardNotifications =
-      settings()
-          ->value(QStringLiteral(SETTINGS_SHOW_KEYBOARD_NOTIFICATIONS), SETTINGS_DEFAULT_SHOW_KEYBOARD_NOTIFICATIONS)
-          .toBool() ||
-      m_alwaysShowNotifications;
-
   if (!newEngine) {
     handleSinkListChanged();
   }
@@ -144,8 +139,40 @@ void OneG4Volume::handleSinkListChanged() {
 
   const auto& sinks = m_engine->sinks();
   if (!sinks.isEmpty()) {
-    const qsizetype idx = std::clamp<qsizetype>(m_defaultSinkIndex, 0, sinks.count() - 1);
-    AudioDevice* newDefaultSink = sinks.at(idx);
+    QList<uint> sinkIds;
+    sinkIds.reserve(sinks.size());
+    for (const AudioDevice* sink : sinks) {
+      sinkIds.append(sink->index());
+    }
+
+    const QVariant storedSinkSetting = settings()->value(QStringLiteral(SETTINGS_DEVICE), SETTINGS_DEFAULT_DEVICE);
+    const bool migrationDone = settings()->value(QStringLiteral(SETTINGS_DEVICE_ID_MIGRATION_DONE), false).toBool();
+    if (const std::optional<uint> migratedSinkId = migrateLegacySinkSelection(sinkIds, storedSinkSetting, migrationDone);
+        migratedSinkId.has_value()) {
+      const QVariant migratedValue = static_cast<uint>(migratedSinkId.value());
+      if (settings()->value(QStringLiteral(SETTINGS_DEVICE), SETTINGS_DEFAULT_DEVICE) != migratedValue) {
+        settings()->setValue(QStringLiteral(SETTINGS_DEVICE), migratedValue);
+      }
+      settings()->setValue(QStringLiteral(SETTINGS_DEVICE_ID_MIGRATION_DONE), true);
+    }
+    else if (!migrationDone) {
+      settings()->setValue(QStringLiteral(SETTINGS_DEVICE_ID_MIGRATION_DONE), true);
+    }
+
+    const QVariant resolvedSinkSetting = settings()->value(QStringLiteral(SETTINGS_DEVICE), SETTINGS_DEFAULT_DEVICE);
+    m_defaultSinkId = chooseSinkId(sinkIds, resolvedSinkSetting);
+
+    AudioDevice* newDefaultSink = nullptr;
+    for (AudioDevice* sink : sinks) {
+      if (sink->index() == m_defaultSinkId) {
+        newDefaultSink = sink;
+        break;
+      }
+    }
+    if (!newDefaultSink) {
+      newDefaultSink = sinks.first();
+      m_defaultSinkId = newDefaultSink->index();
+    }
 
     if (newDefaultSink != m_defaultSink) {
       if (m_defaultSink) {
@@ -159,8 +186,8 @@ void OneG4Volume::handleSinkListChanged() {
       }
 
       if (auto* sink = m_defaultSink.data()) {
-        connect(sink, &AudioDevice::volumeChanged, this, [this] { showNotification(false); });
-        connect(sink, &AudioDevice::muteChanged, this, [this] { showNotification(false); });
+        connect(sink, &AudioDevice::volumeChanged, this, [this] { showNotification(); });
+        connect(sink, &AudioDevice::muteChanged, this, [this] { showNotification(); });
       }
     }
 
@@ -204,8 +231,8 @@ QDialog* OneG4Volume::configureDialog() {
   return m_configDialog;
 }
 
-void OneG4Volume::showNotification(bool forceShow) const {
-  if ((forceShow && m_showKeyboardNotifications) || m_alwaysShowNotifications) {
+void OneG4Volume::showNotification() const {
+  if (m_alwaysShowNotifications) {
     if (Q_LIKELY(m_defaultSink)) {
       const int vol = m_defaultSink->volume();
       const bool muted = m_defaultSink->mute();

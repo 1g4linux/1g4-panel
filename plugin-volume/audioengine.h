@@ -37,6 +37,7 @@ class AudioEngine : public QObject {
 
  protected:
   QList<AudioDevice*> m_sinks;
+  bool m_ignoreMaxVolume;
 };
 
 #endif  // AUDIOENGINE_H

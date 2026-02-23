@@ -321,7 +321,8 @@ void PulseAudioEngine::setupSubscription() {
   if (!m_ready)
     return;
 
-  connect(this, &PulseAudioEngine::sinkInfoChanged, this, &PulseAudioEngine::retrieveSinkInfo, Qt::QueuedConnection);
+  connect(this, &PulseAudioEngine::sinkInfoChanged, this, &PulseAudioEngine::retrieveSinkInfo,
+          static_cast<Qt::ConnectionType>(Qt::QueuedConnection | Qt::UniqueConnection));
   pa_context_set_subscribe_callback(m_context, contextSubscriptionCallback, this);
 
   pa_threaded_mainloop_lock(m_mainLoop);

@@ -6,6 +6,7 @@
 #include "ui_oneg4volumeconfiguration.h"
 
 #include "audiodevice.h"
+#include "sinkselection.h"
 #include "wireplumberpolicy.h"
 
 #include <QAbstractButton>
@@ -44,8 +45,6 @@ OneG4VolumeConfiguration::OneG4VolumeConfiguration(PluginSettings* settings, boo
           &OneG4VolumeConfiguration::ignoreMaxVolumeCheckBoxChanged);
   connect(ui->alwaysShowNotificationsCheckBox, &QAbstractButton::toggled, this,
           &OneG4VolumeConfiguration::alwaysShowNotificationsCheckBoxChanged);
-  connect(ui->showKeyboardNotificationsCheckBox, &QAbstractButton::toggled, this,
-          &OneG4VolumeConfiguration::showKeyboardNotificationsCheckBoxChanged);
   connect(ui->policyTree, &QTreeWidget::itemChanged, this, &OneG4VolumeConfiguration::policyItemChanged);
   connect(ui->applyPolicyButton, &QPushButton::clicked, this, &OneG4VolumeConfiguration::applyPolicy);
   ui->policyTree->setRootIsDecorated(false);
@@ -58,18 +57,37 @@ OneG4VolumeConfiguration::~OneG4VolumeConfiguration() {
 }
 
 void OneG4VolumeConfiguration::setSinkList(const QList<AudioDevice*> sinks) {
-  const QVariant savedIndex = settings().value(QStringLiteral(SETTINGS_DEVICE), SETTINGS_DEFAULT_DEVICE);
+  const QVariant storedSinkSetting = settings().value(QStringLiteral(SETTINGS_DEVICE), SETTINGS_DEFAULT_DEVICE);
 
   const bool oldBlock = ui->devAddedCombo->blockSignals(true);
   ui->devAddedCombo->clear();
+  QList<uint> sinkIds;
+  sinkIds.reserve(sinks.size());
 
   for (const AudioDevice* dev : std::as_const(sinks)) {
+    sinkIds.append(dev->index());
     ui->devAddedCombo->addItem(dev->description(), dev->index());
   }
 
+  const bool migrationDone = settings().value(QStringLiteral(SETTINGS_DEVICE_ID_MIGRATION_DONE), false).toBool();
+  if (const std::optional<uint> migratedSinkId = migrateLegacySinkSelection(sinkIds, storedSinkSetting, migrationDone);
+      migratedSinkId.has_value()) {
+    const QVariant migratedValue = static_cast<uint>(migratedSinkId.value());
+    if (settings().value(QStringLiteral(SETTINGS_DEVICE), SETTINGS_DEFAULT_DEVICE) != migratedValue) {
+      settings().setValue(QStringLiteral(SETTINGS_DEVICE), migratedValue);
+    }
+    settings().setValue(QStringLiteral(SETTINGS_DEVICE_ID_MIGRATION_DONE), true);
+  }
+  else if (!migrationDone && !sinkIds.isEmpty()) {
+    settings().setValue(QStringLiteral(SETTINGS_DEVICE_ID_MIGRATION_DONE), true);
+  }
+
+  const QVariant resolvedSinkSetting = settings().value(QStringLiteral(SETTINGS_DEVICE), SETTINGS_DEFAULT_DEVICE);
+  const uint resolvedSinkId = chooseSinkId(sinkIds, resolvedSinkSetting);
+
   int comboIndex = 0;
   for (int i = 0; i < ui->devAddedCombo->count(); ++i) {
-    if (ui->devAddedCombo->itemData(i) == savedIndex) {
+    if (ui->devAddedCombo->itemData(i).toUInt() == resolvedSinkId) {
       comboIndex = i;
       break;
     }
@@ -116,21 +134,6 @@ void OneG4VolumeConfiguration::ignoreMaxVolumeCheckBoxChanged(bool state) {
 void OneG4VolumeConfiguration::alwaysShowNotificationsCheckBoxChanged(bool state) {
   if (!mLockSettingChanges) {
     settings().setValue(QStringLiteral(SETTINGS_ALWAYS_SHOW_NOTIFICATIONS), state);
-  }
-
-  ui->showKeyboardNotificationsCheckBox->setEnabled(!state);
-
-  if (!ui->showKeyboardNotificationsCheckBox->isChecked()) {
-    ui->showKeyboardNotificationsCheckBox->setChecked(true);
-  }
-  else if (!mLockSettingChanges) {
-    settings().setValue(QStringLiteral(SETTINGS_SHOW_KEYBOARD_NOTIFICATIONS), true);
-  }
-}
-
-void OneG4VolumeConfiguration::showKeyboardNotificationsCheckBoxChanged(bool state) {
-  if (!mLockSettingChanges) {
-    settings().setValue(QStringLiteral(SETTINGS_SHOW_KEYBOARD_NOTIFICATIONS), state);
   }
 }
 
@@ -184,18 +187,6 @@ void OneG4VolumeConfiguration::loadSettings() {
       settings()
           .value(QStringLiteral(SETTINGS_ALWAYS_SHOW_NOTIFICATIONS), SETTINGS_DEFAULT_ALWAYS_SHOW_NOTIFICATIONS)
           .toBool());
-
-  if (ui->alwaysShowNotificationsCheckBox->isChecked()) {
-    ui->showKeyboardNotificationsCheckBox->setChecked(true);
-    ui->showKeyboardNotificationsCheckBox->setEnabled(false);
-  }
-  else {
-    ui->showKeyboardNotificationsCheckBox->setChecked(
-        settings()
-            .value(QStringLiteral(SETTINGS_SHOW_KEYBOARD_NOTIFICATIONS), SETTINGS_DEFAULT_SHOW_KEYBOARD_NOTIFICATIONS)
-            .toBool());
-    ui->showKeyboardNotificationsCheckBox->setEnabled(true);
-  }
 
   mLockSettingChanges = false;
 }

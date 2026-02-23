@@ -1,0 +1,16 @@
+if(NOT DEFINED ONEG4_VOLUME_SOURCE)
+    message(FATAL_ERROR "ONEG4_VOLUME_SOURCE is required")
+endif()
+
+file(READ "${ONEG4_VOLUME_SOURCE}" ONEG4_VOLUME_CONTENT)
+
+string(FIND "${ONEG4_VOLUME_CONTENT}" "#elif USE_PIPEWIRE" LEGACY_GUARD_POS)
+if(NOT LEGACY_GUARD_POS EQUAL -1)
+    message(FATAL_ERROR "Legacy guard '#elif USE_PIPEWIRE' is present")
+endif()
+
+set(EXPECTED_GUARD "#elif defined(USE_PIPEWIRE) && USE_PIPEWIRE")
+string(FIND "${ONEG4_VOLUME_CONTENT}" "${EXPECTED_GUARD}" EXPECTED_GUARD_POS)
+if(EXPECTED_GUARD_POS EQUAL -1)
+    message(FATAL_ERROR "Expected guard '${EXPECTED_GUARD}' is missing")
+endif()

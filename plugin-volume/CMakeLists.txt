@@ -8,6 +8,7 @@ set(HEADERS
     oneg4volumeconfiguration.h
     audioengine.h
     wireplumberpolicy.h
+    sinkselection.h
 )
 
 
@@ -19,6 +20,7 @@ set(SOURCES
     oneg4volumeconfiguration.cpp
     audioengine.cpp
     wireplumberpolicy.cpp
+    sinkselection.cpp
 )
 
 

@@ -6,6 +6,7 @@
 #include "audiodevice.h"
 
 #include <QMetaObject>
+#include <QLoggingCategory>
 #include <QPointer>
 #include <QtDebug>
 #include <QtGlobal>
@@ -20,6 +21,8 @@
 #include <algorithm>
 
 namespace {
+Q_LOGGING_CATEGORY(lcPipeWireEngine, "oneg4.panel.plugin.volume.pipewire", QtWarningMsg)
+
 struct NodeListenerData {
   PipeWireEngine* engine;
   uint32_t nodeId;
@@ -420,8 +423,9 @@ void PipeWireEngine::addOrUpdateNode(uint32_t id,
                                      int cardId,
                                      const QString& profileName) {
   const bool isBluetooth = qname.contains(QLatin1String("bluez"), Qt::CaseInsensitive);
-  qDebug() << "PipeWireEngine: addOrUpdateNode id" << id << "name:" << qname << "desc:" << qdesc
-           << "mediaClass:" << (type == Sink ? "Audio/Sink" : "Audio/Source") << (isBluetooth ? "[Bluetooth]" : "");
+  qCDebug(lcPipeWireEngine) << "PipeWireEngine: addOrUpdateNode id" << id << "name:" << qname << "desc:" << qdesc
+                            << "mediaClass:" << (type == Sink ? "Audio/Sink" : "Audio/Source")
+                            << (isBluetooth ? "[Bluetooth]" : "");
 
   AudioDevice* dev = m_deviceByWpId.value(id, nullptr);
   bool newDevice = (dev == nullptr);
@@ -725,8 +729,8 @@ void PipeWireEngine::onNodeParams(void* data,
           return;
         }
         const bool isBluetooth = dev->name().contains(QLatin1String("bluez"), Qt::CaseInsensitive);
-        qDebug() << "PipeWireEngine: onNodeParams node" << nodeId << "device" << dev->name()
-                 << (isBluetooth ? "[Bluetooth]" : "") << "paramId" << paramId;
+        qCDebug(lcPipeWireEngine) << "PipeWireEngine: onNodeParams node" << nodeId << "device" << dev->name()
+                                  << (isBluetooth ? "[Bluetooth]" : "") << "paramId" << paramId;
       },
       Qt::QueuedConnection);
 }
@@ -779,7 +783,7 @@ void PipeWireEngine::queryNodeVolume(uint32_t nodeId) {
     qWarning() << "PipeWireEngine: failed to enum params for node" << nodeId << "error:" << res;
   }
   else {
-    qDebug() << "PipeWireEngine: queried volume/mute for node" << nodeId;
+    qCDebug(lcPipeWireEngine) << "PipeWireEngine: queried volume/mute for node" << nodeId;
   }
 
   pw_thread_loop_unlock(m_threadLoop);
@@ -825,8 +829,8 @@ void PipeWireEngine::setNodeVolume(uint32_t nodeId, float volume) {
           break;
         }
       }
-      qDebug() << "PipeWireEngine: set volume for node" << nodeId << "device" << devName
-               << (isBluetooth ? "[Bluetooth]" : "") << "to" << volume;
+      qCDebug(lcPipeWireEngine) << "PipeWireEngine: set volume for node" << nodeId << "device" << devName
+                                << (isBluetooth ? "[Bluetooth]" : "") << "to" << volume;
     }
   }
 
@@ -871,8 +875,8 @@ void PipeWireEngine::setNodeMute(uint32_t nodeId, bool mute) {
           break;
         }
       }
-      qDebug() << "PipeWireEngine: set mute for node" << nodeId << "device" << devName
-               << (isBluetooth ? "[Bluetooth]" : "") << "to" << mute;
+      qCDebug(lcPipeWireEngine) << "PipeWireEngine: set mute for node" << nodeId << "device" << devName
+                                << (isBluetooth ? "[Bluetooth]" : "") << "to" << mute;
     }
   }
 
@@ -927,8 +931,9 @@ void PipeWireEngine::commitDeviceVolume(AudioDevice* device) {
 
   const QString devName = device->name();
   const bool isBluetooth = devName.contains(QLatin1String("bluez"), Qt::CaseInsensitive);
-  qDebug() << "PipeWireEngine: commitDeviceVolume device" << devName << (isBluetooth ? "[Bluetooth]" : "") << "node"
-           << nodeId << "volume" << percent << "% (" << volume << ")";
+  qCDebug(lcPipeWireEngine) << "PipeWireEngine: commitDeviceVolume device" << devName
+                            << (isBluetooth ? "[Bluetooth]" : "") << "node" << nodeId << "volume" << percent
+                            << "% (" << volume << ")";
 
   setNodeVolume(nodeId, volume);
 }
@@ -943,8 +948,8 @@ void PipeWireEngine::setMute(AudioDevice* device, bool state) {
 
   const QString devName = device->name();
   const bool isBluetooth = devName.contains(QLatin1String("bluez"), Qt::CaseInsensitive);
-  qDebug() << "PipeWireEngine: setMute device" << devName << (isBluetooth ? "[Bluetooth]" : "") << "node" << nodeId
-           << "mute" << state;
+  qCDebug(lcPipeWireEngine) << "PipeWireEngine: setMute device" << devName << (isBluetooth ? "[Bluetooth]" : "")
+                            << "node" << nodeId << "mute" << state;
 
   setNodeMute(nodeId, state);
 }

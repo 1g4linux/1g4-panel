@@ -10,13 +10,7 @@
 #include <cmath>
 #include <utility>
 
-namespace {
-
-bool s_ignoreMaxVolume = false;
-
-}  // namespace
-
-AudioEngine::AudioEngine(QObject* parent) : QObject(parent) {}
+AudioEngine::AudioEngine(QObject* parent) : QObject(parent), m_ignoreMaxVolume(false) {}
 
 AudioEngine::~AudioEngine() {
   for (AudioDevice* device : std::as_const(m_sinks)) {
@@ -37,7 +31,7 @@ int AudioEngine::volumeBounded(int volume, AudioDevice* device) const {
     return 0;
   }
 
-  if (s_ignoreMaxVolume) {
+  if (m_ignoreMaxVolume) {
     return volume;
   }
 
@@ -55,5 +49,5 @@ void AudioEngine::unmute(AudioDevice* device) {
 }
 
 void AudioEngine::setIgnoreMaxVolume(bool ignore) {
-  s_ignoreMaxVolume = ignore;
+  m_ignoreMaxVolume = ignore;
 }
