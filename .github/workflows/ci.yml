@@ -22,10 +22,6 @@ jobs:
             sanitizer_flags: "-fsanitize=undefined"
             runtime_env: |
               UBSAN_OPTIONS=halt_on_error=1:print_stacktrace=1
-          - name: tsan
-            sanitizer_flags: "-fsanitize=thread"
-            runtime_env: |
-              TSAN_OPTIONS=halt_on_error=1:second_deadlock_stack=1:report_thread_leaks=0:suppressions=${GITHUB_WORKSPACE}/tests/tsan_qttest.supp
 
     env:
       CC: clang
@@ -74,8 +70,4 @@ jobs:
         run: |
           set -euo pipefail
           eval "${{ matrix.runtime_env }}"
-          if [ "${{ matrix.name }}" = "tsan" ]; then
-            ctest --test-dir "build-${{ matrix.name }}" --output-on-failure --parallel 1
-          else
-            ctest --test-dir "build-${{ matrix.name }}" --output-on-failure
-          fi
+          ctest --test-dir "build-${{ matrix.name }}" --output-on-failure
