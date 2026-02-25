@@ -48,6 +48,7 @@ jobs:
             qt6-qtbase-devel qt6-qttools-devel \
             kf6-kwindowsystem-devel \
             libX11-devel libqtxdg-devel libqtxdg libxcb-devel \
+            bluez-libs-devel \
             pipewire-devel wireplumber-devel \
             glib2-devel pulseaudio-libs-devel alsa-lib-devel
 
