@@ -124,6 +124,7 @@ PipeWireEngine::PipeWireEngine(RuntimeMode mode, QObject* parent)
 
 PipeWireEngine::~PipeWireEngine() {
   m_isShuttingDown.store(true, std::memory_order_release);
+  m_reconnectionTimer.stop();
 
   for (uint32_t nodeId : m_nodeByNodeId.keys()) {
     unbindNode(nodeId);
@@ -148,6 +149,7 @@ PipeWireEngine::~PipeWireEngine() {
 
     if (m_core) {
       spa_hook_remove(&m_coreListener);
+      pw_core_disconnect(m_core);
       m_core = nullptr;
       spa_zero(m_coreListener);
     }
@@ -244,6 +246,10 @@ void PipeWireEngine::connectContext() {
   if (!m_registry) {
     qCWarning(lcVolumeBackend) << "PipeWireEngine: failed to get registry";
     setBackendHealth(BackendHealthState::Reconnecting, QStringLiteral("PipeWire registry unavailable, retry scheduled"));
+    spa_hook_remove(&m_coreListener);
+    spa_zero(m_coreListener);
+    pw_core_disconnect(m_core);
+    m_core = nullptr;
     pw_thread_loop_unlock(m_threadLoop);
     m_connecting = false;
     m_reconnectionTimer.start();
