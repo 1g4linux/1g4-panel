@@ -1,0 +1,73 @@
+name: ci
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  san:
+    runs-on: ubuntu-latest
+    container: fedora:rawhide
+    name: san-${{ matrix.name }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: asan
+            sanitizer_flags: "-fsanitize=address,undefined -fsanitize-address-use-after-scope"
+            runtime_env: |
+              ASAN_OPTIONS=abort_on_error=1:detect_leaks=1:fast_unwind_on_malloc=0:detect_stack_use_after_return=1:strict_string_checks=1:check_initialization_order=1:detect_odr_violation=1
+              UBSAN_OPTIONS=halt_on_error=1:print_stacktrace=1
+          - name: ubsan
+            sanitizer_flags: "-fsanitize=undefined"
+            runtime_env: |
+              UBSAN_OPTIONS=halt_on_error=1:print_stacktrace=1
+
+    env:
+      CC: clang
+      CXX: clang++
+      LLVM_SYMBOLIZER_PATH: /usr/bin/llvm-symbolizer
+      ASAN_SYMBOLIZER_PATH: /usr/bin/llvm-symbolizer
+      CFLAGS: -O1 -g -fno-omit-frame-pointer -fno-optimize-sibling-calls -fno-sanitize-merge
+      CXXFLAGS: -O1 -g -fno-omit-frame-pointer -fno-optimize-sibling-calls -fno-sanitize-merge
+      LDFLAGS: -fuse-ld=lld
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          dnf -y update
+          dnf -y install \
+            clang llvm lld compiler-rt \
+            git cmake ninja-build pkgconf-pkg-config \
+            qt6-qtbase-devel qt6-qttools-devel \
+            kf6-kwindowsystem-devel \
+            libX11-devel libqtxdg-devel libqtxdg libxcb-devel \
+            bluez-libs-devel \
+            pipewire-devel wireplumber-devel \
+            glib2-devel pulseaudio-libs-devel alsa-lib-devel
+
+      - name: Configure
+        run: |
+          builddir="build-${{ matrix.name }}"
+          export CFLAGS="${CFLAGS} ${{ matrix.sanitizer_flags }}"
+          export CXXFLAGS="${CXXFLAGS} ${{ matrix.sanitizer_flags }}"
+          export LDFLAGS="${LDFLAGS} ${{ matrix.sanitizer_flags }}"
+          cmake -S . -B "$builddir" -G Ninja \
+            -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+            -DCMAKE_C_COMPILER="${CC}" \
+            -DCMAKE_CXX_COMPILER="${CXX}" \
+            -DCMAKE_C_FLAGS="${CFLAGS}" \
+            -DCMAKE_CXX_FLAGS="${CXXFLAGS}" \
+            -DCMAKE_EXE_LINKER_FLAGS="${LDFLAGS}" \
+            -DCMAKE_SHARED_LINKER_FLAGS="${LDFLAGS}"
+
+      - name: Build
+        run: cmake --build "build-${{ matrix.name }}"
+
+      - name: Test
+        run: |
+          set -euo pipefail
+          eval "${{ matrix.runtime_env }}"
+          ctest --test-dir "build-${{ matrix.name }}" --output-on-failure

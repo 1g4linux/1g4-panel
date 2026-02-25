@@ -1,0 +1,6 @@
+# QtTest's watchdog thread triggers known TSAN reports in some Qt 6.x builds:
+# - false-positive race in watchdog teardown paths
+# - watchdog thread leak report at process shutdown
+# We still keep halt_on_error=1 in CI; this file only suppresses QtTest internals.
+race:libQt6Test.so
+race:QtTest Watchdog

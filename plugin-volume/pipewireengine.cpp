@@ -56,6 +56,9 @@ QString parseDefaultNodeName(const char* value) {
 }  // namespace
 
 PipeWireEngine::PipeWireEngine(QObject* parent)
+    : PipeWireEngine(RuntimeMode::Live, parent) {}
+
+PipeWireEngine::PipeWireEngine(RuntimeMode mode, QObject* parent)
     : AudioEngine(parent),
       m_threadLoop(nullptr),
       m_context(nullptr),
@@ -65,11 +68,18 @@ PipeWireEngine::PipeWireEngine(QObject* parent)
       m_ready(false),
       m_connecting(false),
       m_isShuttingDown(false),
+      m_pipeWireInitialized(false),
       m_maximumVolume(150),
       m_metadataId(SPA_ID_INVALID),
       m_defaultOutputNodeName(),
       m_defaultInputNodeName() {
+  if (mode == RuntimeMode::DisabledForTests) {
+    setBackendHealth(BackendHealthState::Unavailable, QStringLiteral("PipeWire runtime disabled for tests"));
+    return;
+  }
+
   pw_init(nullptr, nullptr);
+  m_pipeWireInitialized = true;
 
   m_reconnectionTimer.setSingleShot(true);
   m_reconnectionTimer.setInterval(200);
@@ -114,6 +124,7 @@ PipeWireEngine::PipeWireEngine(QObject* parent)
 
 PipeWireEngine::~PipeWireEngine() {
   m_isShuttingDown.store(true, std::memory_order_release);
+  m_reconnectionTimer.stop();
 
   for (uint32_t nodeId : m_nodeByNodeId.keys()) {
     unbindNode(nodeId);
@@ -138,6 +149,7 @@ PipeWireEngine::~PipeWireEngine() {
 
     if (m_core) {
       spa_hook_remove(&m_coreListener);
+      pw_core_disconnect(m_core);
       m_core = nullptr;
       spa_zero(m_coreListener);
     }
@@ -154,7 +166,9 @@ PipeWireEngine::~PipeWireEngine() {
     m_threadLoop = nullptr;
   }
 
-  pw_deinit();
+  if (m_pipeWireInitialized) {
+    pw_deinit();
+  }
 }
 
 int PipeWireEngine::volumeMax(AudioDevice* /*device*/) const {
@@ -232,6 +246,10 @@ void PipeWireEngine::connectContext() {
   if (!m_registry) {
     qCWarning(lcVolumeBackend) << "PipeWireEngine: failed to get registry";
     setBackendHealth(BackendHealthState::Reconnecting, QStringLiteral("PipeWire registry unavailable, retry scheduled"));
+    spa_hook_remove(&m_coreListener);
+    spa_zero(m_coreListener);
+    pw_core_disconnect(m_core);
+    m_core = nullptr;
     pw_thread_loop_unlock(m_threadLoop);
     m_connecting = false;
     m_reconnectionTimer.start();
@@ -254,9 +272,6 @@ void PipeWireEngine::connectContext() {
 }
 
 void PipeWireEngine::disconnectContext() {
-  if (!m_threadLoop)
-    return;
-
   // Reconnect must start from a clean snapshot; stale node proxies and runtime ids
   // become invalid once the core disconnects.
   const QList<uint32_t> nodeIds = m_nodeByNodeId.keys();
@@ -291,33 +306,45 @@ void PipeWireEngine::disconnectContext() {
     delete device;
   }
 
-  pw_thread_loop_lock(m_threadLoop);
+  if (m_threadLoop) {
+    pw_thread_loop_lock(m_threadLoop);
 
-  if (m_metadata) {
-    spa_hook_remove(&m_metadataListener);
-    pw_proxy_destroy(reinterpret_cast<pw_proxy*>(m_metadata));
+    if (m_metadata) {
+      spa_hook_remove(&m_metadataListener);
+      pw_proxy_destroy(reinterpret_cast<pw_proxy*>(m_metadata));
+      m_metadata = nullptr;
+    }
+    spa_zero(m_metadataListener);
+    m_metadataId = SPA_ID_INVALID;
+    m_disabledNodeIds.clear();
+
+    if (m_registry) {
+      spa_hook_remove(&m_registryListener);
+      spa_zero(m_registryListener);
+      m_registry = nullptr;
+    }
+
+    if (m_core) {
+      spa_hook_remove(&m_coreListener);
+      spa_zero(m_coreListener);
+      pw_core_disconnect(m_core);
+      m_core = nullptr;
+    }
+
+    pw_thread_loop_unlock(m_threadLoop);
+  }
+  else {
     m_metadata = nullptr;
-  }
-  spa_zero(m_metadataListener);
-  m_metadataId = SPA_ID_INVALID;
-  m_disabledNodeIds.clear();
-
-  if (m_registry) {
-    spa_hook_remove(&m_registryListener);
-    spa_zero(m_registryListener);
+    spa_zero(m_metadataListener);
+    m_metadataId = SPA_ID_INVALID;
+    m_disabledNodeIds.clear();
     m_registry = nullptr;
-  }
-
-  if (m_core) {
-    spa_hook_remove(&m_coreListener);
-    spa_zero(m_coreListener);
-    pw_core_disconnect(m_core);
+    spa_zero(m_registryListener);
     m_core = nullptr;
+    spa_zero(m_coreListener);
   }
 
   setReady(false);
-
-  pw_thread_loop_unlock(m_threadLoop);
 
   if (removedEndpoint) {
     emit sinkListChanged();

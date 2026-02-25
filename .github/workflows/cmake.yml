@@ -31,7 +31,9 @@ jobs:
           libqtxdg-devel \
           libqtxdg \
           libxcb-devel \
+          bluez-libs-devel \
           pipewire-devel \
+          wireplumber-devel \
           glib2-devel \
           pulseaudio-libs-devel \
           alsa-lib-devel \

@@ -1,60 +1,159 @@
-# 🖥️ 1g4-panel
+# 1g4-panel
 
-> **a sleek, modular taskbar.
+`1g4-panel` is the OneG4 desktop panel module implemented in Qt6/C++. It starts one or more panel windows, loads panel plugins, and provides panel configuration UI (`panel/main.cpp`, `panel/oneg4panelapplication.cpp`).
 
----
+## Why it exists
 
-## ✨ Overview
+This repository contains the panel component used by OneG4 sessions, including autostart integration (`autostart/1g4-panel.desktop.in`) and standalone CLI launch (`panel/man/1g4-panel.1`).
 
-The **1g4-panel** is built around a flexible plugin architecture. While the source code organizes these as "plugins" (e.g., `plugin-mainmenu`), the configuration interface refers to them as **"Widgets"**.
+## Status
 
-### 🧩 Available Plugins (Widgets)
+Unknown from repo scan for overall project stability.
 
-Here are some of the key plugins you can add to your panel:
+TODO: document explicit release/stability policy here.
 
-#### 🛠️ Custom Command (`plugin-customcommand`)
-Execute custom scripts or commands and display their output directly on the panel. Supports text or image output, and interactive click/scroll actions.
+Current signal: volume plugin rewrite work is active (`TODO.md`, `plugin-volume/docs/backend-target-matrix.md`, `plugin-volume/docs/design-decisions.md`).
 
-![Custom command plugin settings](customcommand.png)
+## Features
 
-#### 🌍 World Clock (`plugin-worldclock`)
-Stay on time with a comprehensive clock and calendar.
-- 🕒 Displays local time and date
-- 🌐 Supports multiple time zones
-- 📅 Integrated calendar view
+- Main panel executable `1g4-panel` with CLI options `-h`, `--help-all`, `-v`, `-c/--config/--configfile` (`panel/oneg4panelapplication.cpp`, `panel/man/1g4-panel.1`).
+- Plugin host supports both static and module plugins; module install target defaults to `${CMAKE_INSTALL_FULL_LIBDIR}/1g4-panel` (`cmake/BuildPlugin.cmake`, `panel/plugin.cpp`).
+- Built plugins in this repo: `taskbar`, `statusnotifier`, `volume`, `worldclock`, `spacer` (`plugin-*/CMakeLists.txt`, top-level `CMakeLists.txt`).
+- Default panel/plugin config includes `taskbar`, `worldclock`, `volume`, `statusnotifier` (`panel/resources/panel.conf`, `panel/panelpluginsmodel.cpp`).
+- WM backend abstraction with `xcb` backend module plus dummy fallback when backend loading fails (`panel/backends/xcb/`, `panel/backends/oneg4dummywmbackend.*`, `panel/oneg4panelapplication.cpp`).
+- Volume plugin targets PipeWire + WirePlumber + BlueZ and includes WirePlumber policy file management (`CMakeLists.txt`, `plugin-volume/docs/backend-target-matrix.md`, `plugin-volume/wireplumberpolicy.cpp`).
 
-#### 🚀 Quick Launch (`plugin-taskbar`)
-Launch your favorite apps instantly!
-- Drag & drop applications from the main menu to add them.
-- Organize your most-used tools for easy access.
+## Build
 
-#### 🔔 Status Notifier (`plugin-statusnotifier`)
-Manage your background applications and notifications.
-- Implements the modern [StatusNotifierItem (SNI)](https://www.freedesktop.org/wiki/Specifications/StatusNotifierItem) specification, an area where arbitrary applications can place informational icons.
+Dependencies from build files and CI:
 
----
+- CMake >= 3.18 (`CMakeLists.txt`)
+- Qt6: DBus, Widgets, Xml, Test (`CMakeLists.txt`, `tests/CMakeLists.txt`)
+- KF6 WindowSystem (`CMakeLists.txt`)
+- pkg-config and audio stack dev packages: `libpipewire-0.3`, `wireplumber-0.5`, `bluez` (`CMakeLists.txt`)
+- Fedora package examples used in CI (`.github/workflows/ci.yml`, `.github/workflows/cmake.yml`)
 
-## 📦 Installation
+Fedora example:
 
-### 🔧 Compiling from Source
-Please refer to the generic compilation instructions for **1g4** components to build `1g4-panel` from source.
+```bash
+sudo dnf -y install \
+  git cmake ninja-build gcc-c++ pkgconf-pkg-config \
+  qt6-qtbase-devel qt6-qttools-devel \
+  kf6-kwindowsystem-devel \
+  libX11-devel libqtxdg-devel libqtxdg libxcb-devel \
+  bluez-libs-devel pipewire-devel wireplumber-devel \
+  glib2-devel pulseaudio-libs-devel alsa-lib-devel
+```
 
----
+Configure and build:
 
-## ⚙️ Configuration & Usage
+```bash
+cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=RelWithDebInfo
+cmake --build build
+```
 
-### 🚀 Launching
-`1g4-panel` usually starts automatically with your 1g4 session. You can also launch it manually from the terminal.
+Install:
 
-### 🎨 Customizing
-Make the panel your own!
-- **Right-click** anywhere on the panel to access the context menu.
-- **"Configure Panel"**: Adjust global settings like position, size, and theme.
-- **"Manage Widgets"**: Add, remove, or reorder plugins.
+```bash
+cmake --install build
+```
 
-> **Tip:** If a specific plugin's context menu blocks the main panel menu, look for the "handle" on the left side of the widget (in supported themes like `Frost`) or use the "Manage Widgets" dialog to move it.
+Selected CMake options:
 
----
+- `-DONEG4_DEV_VOLUME_ONLY=ON` builds only compat + volume plugin path (`CMakeLists.txt`)
+- `-DONEG4_VOLUME_DEV_VERBOSE_LOGGING=ON`
+- `-DONEG4_VOLUME_DEV_TEST_BACKENDS=ON`
+- `-DONEG4_VOLUME_ENABLE_WIREPLUMBER_POLICY=ON|OFF`
+- `-DONEG4_VOLUME_ENABLE_BLUETOOTH_BATTERY=ON|OFF`
+- In-source builds are rejected (`CMakeLists.txt`)
+
+## Run / Usage
+
+Show help:
+
+```bash
+build/panel/1g4-panel --help
+```
+
+Run with default configuration lookup:
+
+```bash
+build/panel/1g4-panel
+```
+
+Run with explicit configuration file:
+
+```bash
+build/panel/1g4-panel --config /path/to/panel.conf
+```
+
+Autostart desktop file is installed to `${ONEG4_ETC_XDG_DIR}/autostart` (`autostart/CMakeLists.txt`).
+
+## Configuration
+
+- Default panel config template is `panel/resources/panel.conf` and is installed to `${ONEG4_ETC_XDG_DIR}/oneg4` (`panel/CMakeLists.txt`).
+- The runtime settings object is created as `OneG4::Settings("panel")`; comments document `~/.config/oneg4/panel.conf` as the normal user file unless `--config` is used (`panel/oneg4panelapplication.h`, `panel/oneg4panelapplication.cpp`).
+- If the user config file is missing, `OneG4::Settings` attempts to copy from system config locations (`OneG4/Settings.cpp`).
+- `ONEG4PANEL_PLUGIN_PATH` adds module search paths for plugins/backends (`panel/plugin.cpp`, `panel/oneg4panelapplication.cpp`).
+- `ONEG4_PANEL_PLUGINS_DIR` adds plugin desktop metadata search paths (`panel/oneg4panel.cpp`).
+- Volume policy file path (when policy integration is used): `~/.config/wireplumber/wireplumber.conf.d/60-1g4-panel-volume.conf` (`plugin-volume/wireplumberpolicy.cpp`).
+
+## Architecture
+
+- `OneG4/`: shared compatibility utilities (`Settings`, `PluginInfo`, etc.).
+- `panel/`: main application, panel layout/hosting, config dialogs, man page.
+- `panel/backends/`: WM backend interface + implementations (`xcb` module and dummy backend).
+- `plugin-*/`: panel plugin implementations.
+- `plugin-volume/1g4-mixer/`: static mixer library integrated into volume plugin build.
+- `tests/`: Qt tests and CMake guard tests (mostly volume/plugin integration checks).
+
+Startup flow:
+
+- `panel/main.cpp` starts `OneG4PanelApplication`.
+- `OneG4PanelApplication` parses CLI, loads settings, loads WM backend, and creates panel instances.
+- Panels discover plugin desktop files, instantiate plugins, and apply persisted settings.
+
+## Testing
+
+Run tests with CTest:
+
+```bash
+cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=RelWithDebInfo
+cmake --build build
+ctest --test-dir build --output-on-failure
+```
+
+List registered tests:
+
+```bash
+ctest --test-dir build -N
+```
+
+`tests/CMakeLists.txt` defines the test targets and guard checks. On the default build tree, `ctest -N` reports 26 tests.
+
+CI workflows:
+
+- `.github/workflows/cmake.yml`: Fedora Qt6 build
+- `.github/workflows/ci.yml`: sanitizer matrix (`asan`, `ubsan`, `tsan`) plus CTest
+
+## Troubleshooting
+
+- Missing `libpipewire-0.3`, `wireplumber-0.5`, or `bluez` development files causes CMake configuration failure (`CMakeLists.txt`).
+- If no WM backend module loads, the app falls back to the dummy backend and logs a warning (`panel/oneg4panelapplication.cpp`).
+- In-source builds are blocked (`CMakeLists.txt`).
+
+## License
+
+GNU Lesser General Public License v2.1 (`LICENSE`).
+
+## Contributing
+
+Repo-specific expectations visible in this tree:
+
+- Build out-of-tree (`cmake -S . -B build`).
+- Run `ctest --test-dir build --output-on-failure` before sending changes.
+- Follow `.clang-format` (Chromium base, `ColumnLimit: 120`, includes preserved).
+- Keep `plugin-volume/docs/` and `tests/check_*` guard expectations aligned when changing volume plugin architecture/dependency behavior.
 
 <div align="center">
   <sub>Built with ❤️ by the 1g4 team — <a href="https://1g4.org">1g4.org</a></sub>

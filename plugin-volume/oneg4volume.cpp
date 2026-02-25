@@ -67,11 +67,28 @@ OneG4Volume::OneG4Volume(const IOneG4PanelPluginStartupInfo& startupInfo)
 }
 
 OneG4Volume::~OneG4Volume() {
+  setDefaultSource(nullptr);
+  setDefaultSink(nullptr);
+
+  if (m_engine) {
+    disconnect(m_engine, nullptr, this, nullptr);
+    delete m_engine;
+    m_engine = nullptr;
+  }
+
   delete m_mixerDialog;
+  m_mixerDialog = nullptr;
+
+  delete m_volumeButton;
+  m_volumeButton = nullptr;
 }
 
 void OneG4Volume::setAudioEngine(AudioEngine* engine) {
   if (!engine) {
+    return;
+  }
+
+  if (engine == m_engine) {
     return;
   }
 
@@ -87,6 +104,10 @@ void OneG4Volume::setAudioEngine(AudioEngine* engine) {
     disconnect(m_engine, nullptr, this, nullptr);
     delete m_engine;
     m_engine = nullptr;
+  }
+
+  if (engine->parent() != this) {
+    engine->setParent(this);
   }
 
   m_engine = engine;
