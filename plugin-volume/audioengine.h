@@ -8,6 +8,7 @@
 #include <QHash>
 #include <QObject>
 #include <QList>
+#include <QSet>
 #include <QString>
 #include <QTimer>
 #include <QVariantMap>
@@ -152,7 +153,10 @@ class AudioEngine : public QObject {
   bool m_ignoreMaxVolume;
 
  private:
-  static constexpr int kDiscoveryStateCoalesceIntervalMs = 20;
+  enum class CoalescedStateEventType { Discovery, EndpointState, BackendHealth };
+
+  static constexpr int kStateChangedCoalesceIntervalMs = 20;
+  void queueStateChangedByObjectAndType(const QString& objectKey, CoalescedStateEventType eventType);
   void queueStateChangedFromDiscovery();
   void flushDeferredStateChanged();
 
@@ -161,7 +165,7 @@ class AudioEngine : public QObject {
   QHash<QString, ChangeSource> m_lastChangeSourceByEndpoint;
   BackendHealthSnapshot m_backendHealth;
   QTimer m_discoveryStateCoalesceTimer;
-  bool m_hasPendingDiscoveryState;
+  QSet<QString> m_pendingCoalescedStateEvents;
 };
 
 #endif  // AUDIOENGINE_H

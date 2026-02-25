@@ -83,10 +83,9 @@ AudioEngine::AudioEngine(QObject* parent)
           BackendHealthState::Unknown,
           0U,
           QString(),
-      },
-      m_hasPendingDiscoveryState(false) {
+      } {
   m_discoveryStateCoalesceTimer.setSingleShot(true);
-  m_discoveryStateCoalesceTimer.setInterval(kDiscoveryStateCoalesceIntervalMs);
+  m_discoveryStateCoalesceTimer.setInterval(kStateChangedCoalesceIntervalMs);
   connect(this, &AudioEngine::sinkListChanged, this, &AudioEngine::queueStateChangedFromDiscovery);
   connect(&m_discoveryStateCoalesceTimer, &QTimer::timeout, this, &AudioEngine::flushDeferredStateChanged);
 }
@@ -292,7 +291,7 @@ void AudioEngine::beginPendingVolumeOperation(AudioDevice* device, int previousV
 
   m_pendingOperationsByKey.insert(pendingOperationKey(endpointStableId, PendingOperationKind::SetVolume), pending);
   m_lastChangeSourceByEndpoint.insert(endpointStableId, ChangeSource::UserAction);
-  emit stateChanged();
+  queueStateChangedByObjectAndType(endpointStableId, CoalescedStateEventType::EndpointState);
 }
 
 void AudioEngine::beginPendingMuteOperation(AudioDevice* device, bool previousMuted, bool targetMuted) {
@@ -312,7 +311,7 @@ void AudioEngine::beginPendingMuteOperation(AudioDevice* device, bool previousMu
 
   m_pendingOperationsByKey.insert(pendingOperationKey(endpointStableId, PendingOperationKind::SetMute), pending);
   m_lastChangeSourceByEndpoint.insert(endpointStableId, ChangeSource::UserAction);
-  emit stateChanged();
+  queueStateChangedByObjectAndType(endpointStableId, CoalescedStateEventType::EndpointState);
 }
 
 void AudioEngine::completePendingVolumeOperation(AudioDevice* device, int appliedVolumePercent) {
@@ -325,7 +324,7 @@ void AudioEngine::completePendingVolumeOperation(AudioDevice* device, int applie
   const int removed = m_pendingOperationsByKey.remove(pendingOperationKey(endpointStableId, PendingOperationKind::SetVolume));
   m_lastChangeSourceByEndpoint.insert(endpointStableId, ChangeSource::BackendEvent);
   if (removed > 0) {
-    emit stateChanged();
+    queueStateChangedByObjectAndType(endpointStableId, CoalescedStateEventType::EndpointState);
   }
 }
 
@@ -339,7 +338,7 @@ void AudioEngine::completePendingMuteOperation(AudioDevice* device, bool applied
   const int removed = m_pendingOperationsByKey.remove(pendingOperationKey(endpointStableId, PendingOperationKind::SetMute));
   m_lastChangeSourceByEndpoint.insert(endpointStableId, ChangeSource::BackendEvent);
   if (removed > 0) {
-    emit stateChanged();
+    queueStateChangedByObjectAndType(endpointStableId, CoalescedStateEventType::EndpointState);
   }
 }
 
@@ -359,7 +358,7 @@ void AudioEngine::rollbackPendingVolumeOperation(AudioDevice* device) {
   m_pendingOperationsByKey.remove(key);
   device->setVolumeNoCommit(pending.previousVolumePercent);
   m_lastChangeSourceByEndpoint.insert(endpointStableId, ChangeSource::Rollback);
-  emit stateChanged();
+  queueStateChangedByObjectAndType(endpointStableId, CoalescedStateEventType::EndpointState);
 }
 
 void AudioEngine::rollbackPendingMuteOperation(AudioDevice* device) {
@@ -378,7 +377,7 @@ void AudioEngine::rollbackPendingMuteOperation(AudioDevice* device) {
   m_pendingOperationsByKey.remove(key);
   device->setMuteNoCommit(pending.previousMuted);
   m_lastChangeSourceByEndpoint.insert(endpointStableId, ChangeSource::Rollback);
-  emit stateChanged();
+  queueStateChangedByObjectAndType(endpointStableId, CoalescedStateEventType::EndpointState);
 }
 
 void AudioEngine::markChangeSource(AudioDevice* device, ChangeSource source) {
@@ -393,7 +392,7 @@ void AudioEngine::markChangeSource(AudioDevice* device, ChangeSource source) {
   }
 
   m_lastChangeSourceByEndpoint.insert(endpointStableId, source);
-  emit stateChanged();
+  queueStateChangedByObjectAndType(endpointStableId, CoalescedStateEventType::EndpointState);
 }
 
 void AudioEngine::clearTrackingForDevice(const AudioDevice* device) {
@@ -410,7 +409,7 @@ void AudioEngine::clearTrackingForDevice(const AudioDevice* device) {
             changed;
 
   if (changed) {
-    emit stateChanged();
+    queueStateChangedByObjectAndType(endpointStableId, CoalescedStateEventType::EndpointState);
   }
 }
 
@@ -421,28 +420,40 @@ void AudioEngine::setBackendHealth(BackendHealthState state, const QString& mess
 
   m_backendHealth.state = state;
   m_backendHealth.message = message;
-  emit stateChanged();
+  queueStateChangedByObjectAndType(QStringLiteral("backend"), CoalescedStateEventType::BackendHealth);
 }
 
 void AudioEngine::recordReconnectAttempt(const QString& message) {
   ++m_backendHealth.reconnectAttempts;
   m_backendHealth.state = BackendHealthState::Reconnecting;
   m_backendHealth.message = message;
-  emit stateChanged();
+  queueStateChangedByObjectAndType(QStringLiteral("backend"), CoalescedStateEventType::BackendHealth);
 }
 
 void AudioEngine::queueStateChangedFromDiscovery() {
-  m_hasPendingDiscoveryState = true;
+  queueStateChangedByObjectAndType(QStringLiteral("discovery:sinks"), CoalescedStateEventType::Discovery);
+}
+
+void AudioEngine::queueStateChangedByObjectAndType(const QString& objectKey, CoalescedStateEventType eventType) {
+  QString stableObjectKey = objectKey.trimmed();
+  if (stableObjectKey.isEmpty()) {
+    stableObjectKey = QStringLiteral("global");
+  }
+
+  const QString eventKey =
+      QStringLiteral("%1|%2").arg(stableObjectKey, QString::number(static_cast<int>(eventType)));
+  m_pendingCoalescedStateEvents.insert(eventKey);
+
   if (!m_discoveryStateCoalesceTimer.isActive()) {
     m_discoveryStateCoalesceTimer.start();
   }
 }
 
 void AudioEngine::flushDeferredStateChanged() {
-  if (!m_hasPendingDiscoveryState) {
+  if (m_pendingCoalescedStateEvents.isEmpty()) {
     return;
   }
 
-  m_hasPendingDiscoveryState = false;
+  m_pendingCoalescedStateEvents.clear();
   emit stateChanged();
 }

@@ -131,6 +131,8 @@ class AudioEngineSnapshotTest : public QObject {
   void backendControlInterfacesDefaultToUnsupported();
   void stateChangedSignalSubscribesToDiscoveryUpdates();
   void stateChangedSignalCoalescesDiscoveryBursts();
+  void stateChangedSignalCoalescesEndpointBurstByKeyAndType();
+  void stateChangedSignalCoalescesBackendHealthBurstByKeyAndType();
   void volumeCommitRequestRunsAsynchronously();
   void stateSnapshotTracksBackendHealthAndReconnectAttempts();
   void removingEndpointClearsStalePendingOperations();
@@ -298,6 +300,39 @@ void AudioEngineSnapshotTest::stateChangedSignalCoalescesDiscoveryBursts() {
   engine.emitSinkListChangedForTest();
   engine.emitSinkListChangedForTest();
   QTRY_COMPARE_WITH_TIMEOUT(stateChangedSpy.count(), 2, 200);
+}
+
+void AudioEngineSnapshotTest::stateChangedSignalCoalescesEndpointBurstByKeyAndType() {
+  SnapshotDummyEngine engine;
+  engine.setCommitBehavior(true, true);
+  engine.setAutoAcknowledge(false, false);
+  AudioDevice* sink =
+      engine.addSink(QStringLiteral("alsa_output.coalesce"), QStringLiteral("Coalesce Sink"), 21U, 35, false, 2);
+  QVERIFY(sink != nullptr);
+
+  QSignalSpy stateChangedSpy(&engine, &AudioEngine::stateChanged);
+
+  sink->setVolume(70);
+
+  QTRY_COMPARE_WITH_TIMEOUT(stateChangedSpy.count(), 1, 200);
+  QTest::qWait(50);
+  QCOMPARE(stateChangedSpy.count(), 1);
+}
+
+void AudioEngineSnapshotTest::stateChangedSignalCoalescesBackendHealthBurstByKeyAndType() {
+  SnapshotDummyEngine engine;
+  QSignalSpy stateChangedSpy(&engine, &AudioEngine::stateChanged);
+
+  engine.setBackendHealthForTest(AudioEngine::BackendHealthState::Reconnecting, QStringLiteral("first"));
+  engine.setBackendHealthForTest(AudioEngine::BackendHealthState::Reconnecting, QStringLiteral("second"));
+
+  QTRY_COMPARE_WITH_TIMEOUT(stateChangedSpy.count(), 1, 200);
+  QTest::qWait(50);
+  QCOMPARE(stateChangedSpy.count(), 1);
+
+  const AudioEngine::StateSnapshot state = engine.stateSnapshot();
+  QCOMPARE(state.backendHealth.state, AudioEngine::BackendHealthState::Reconnecting);
+  QCOMPARE(state.backendHealth.message, QStringLiteral("second"));
 }
 
 void AudioEngineSnapshotTest::volumeCommitRequestRunsAsynchronously() {
