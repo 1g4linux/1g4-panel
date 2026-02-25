@@ -20,7 +20,7 @@ foreach(DOC_CHECK
         "Missing PipeWire runtime connection:"
         "Missing WirePlumber policy capability:"
         "Missing BlueZ battery/profile/port properties:"
-        "Remaining PulseAudio/libpulse paths are tracked separately in `TODO.md`")
+        "no PulseAudio/libpulse control dependency.")
     string(FIND "${VOLUME_BACKEND_TARGET_DOC_CONTENT}" "${DOC_CHECK}" DOC_CHECK_POS)
     if(DOC_CHECK_POS EQUAL -1)
         message(FATAL_ERROR "Missing backend target matrix documentation snippet: ${DOC_CHECK}")

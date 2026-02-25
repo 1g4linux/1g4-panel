@@ -36,7 +36,6 @@ class OneG4Volume : public QObject, public IOneG4PanelPlugin {
   virtual void settingsChanged();
   void handleSinkListChanged();
   void showNotification() const;
-  void openMixer();
 
  private:
   AudioEngine* m_engine;
@@ -45,7 +44,6 @@ class OneG4Volume : public QObject, public IOneG4PanelPlugin {
   QPointer<AudioDevice> m_defaultSink;
   OneG4::Notification* m_notification;
   QPointer<OneG4VolumeConfiguration> m_configDialog;
-  QPointer<QDialog> m_mixerDialog;
   bool m_alwaysShowNotifications;
 };
 

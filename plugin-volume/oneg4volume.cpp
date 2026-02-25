@@ -12,22 +12,16 @@
 #ifdef USE_PIPEWIRE
 #include "pipewireengine.h"
 #endif
-#ifdef USE_PULSEAUDIO
-#include "pulseaudioengine.h"
-#endif
 #ifdef ONEG4_VOLUME_DEV_TEST_BACKENDS
 #include "testaudioengine.h"
 #endif
 #include "volumebutton.h"
 #include "volumepopup.h"
-#include "1g4-mixer.h"
 
 #include <OneG4/Notification.h>
 #include <QDialog>
 #include <QLoggingCategory>
-#include <QMessageBox>
 #include <QtGlobal>
-#include <OneG4/XdgIcon.h>
 
 #include <algorithm>
 
@@ -38,7 +32,6 @@ OneG4Volume::OneG4Volume(const IOneG4PanelPluginStartupInfo& startupInfo)
       m_defaultSinkId(0U),
       m_defaultSink(nullptr),
       m_configDialog(nullptr),
-      m_mixerDialog(nullptr),
       m_alwaysShowNotifications(SETTINGS_DEFAULT_ALWAYS_SHOW_NOTIFICATIONS) {
   m_volumeButton = new VolumeButton(this);
 
@@ -60,14 +53,10 @@ OneG4Volume::OneG4Volume(const IOneG4PanelPluginStartupInfo& startupInfo)
   qCDebug(lcVolumeBluetooth) << "OneG4Volume: Bluetooth battery integration disabled";
 #endif
 
-  connect(m_volumeButton, &VolumeButton::mixerRequested, this, &OneG4Volume::openMixer);
-
   settingsChanged();
 }
 
-OneG4Volume::~OneG4Volume() {
-  delete m_mixerDialog;
-}
+OneG4Volume::~OneG4Volume() = default;
 
 void OneG4Volume::setAudioEngine(AudioEngine* engine) {
   if (!engine) {
@@ -119,25 +108,21 @@ void OneG4Volume::settingsChanged() {
       engine = new PipeWireEngine(this);
 #endif
     }
-    else if (engineName == QLatin1String("PulseAudio")) {
-#ifdef USE_PULSEAUDIO
-      engine = new PulseAudioEngine(this);
-#endif
-    }
 #ifdef ONEG4_VOLUME_DEV_TEST_BACKENDS
     else if (engineName == QLatin1String("TestBackend")) {
       engine = new TestAudioEngine(this);
     }
 #endif
     if (!engine) {
-      // fallback to first available backend
-#ifdef USE_PULSEAUDIO
-      engine = new PulseAudioEngine(this);
-#elif defined(USE_PIPEWIRE) && USE_PIPEWIRE
+      // PipeWire is the only runtime backend in production builds.
+#ifdef USE_PIPEWIRE
       engine = new PipeWireEngine(this);
 #endif
     }
     if (engine) {
+      if (engineName != engine->backendName()) {
+        settings()->setValue(QStringLiteral(SETTINGS_AUDIO_ENGINE), engine->backendName());
+      }
       setAudioEngine(engine);
     }
   }
@@ -268,27 +253,4 @@ void OneG4Volume::showNotification() const {
       m_notification->update();
     }
   }
-}
-
-void OneG4Volume::openMixer() {
-  if (!m_engine) {
-    qCWarning(lcVolumeUi) << "OneG4Volume: mixer requested but no audio engine is available";
-    QMessageBox::warning(m_volumeButton, tr("Audio"), tr("No audio engine is available"));
-    return;
-  }
-
-  if (!m_mixerDialog) {
-    m_mixerDialog = create_1g4_mixer_dialog();
-    if (!m_mixerDialog) {
-      qCWarning(lcVolumeUi) << "OneG4Volume: failed to create mixer dialog";
-      QMessageBox::warning(m_volumeButton, tr("Audio"), tr("Failed to create mixer dialog"));
-      return;
-    }
-    // Don't parent to volume button to avoid focus issues with panel window
-    m_mixerDialog->setAttribute(Qt::WA_DeleteOnClose, false);
-    connect(m_mixerDialog, &QObject::destroyed, this, [this] { m_mixerDialog = nullptr; });
-  }
-
-  m_mixerDialog->show();
-  m_mixerDialog->raise();
 }

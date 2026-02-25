@@ -50,21 +50,6 @@ add_test(
 )
 
 add_test(
-    NAME plugin_volume_pulseaudio_unique_connection_guard
-    COMMAND ${CMAKE_COMMAND}
-            -DPULSEAUDIO_ENGINE_SOURCE=${CMAKE_SOURCE_DIR}/plugin-volume/pulseaudioengine.cpp
-            -P ${CMAKE_CURRENT_SOURCE_DIR}/check_pulseaudio_unique_connection_guard.cmake
-)
-
-add_test(
-    NAME plugin_volume_pulseaudio_shutdown_guard
-    COMMAND ${CMAKE_COMMAND}
-            -DPULSEAUDIO_ENGINE_SOURCE=${CMAKE_SOURCE_DIR}/plugin-volume/pulseaudioengine.cpp
-            -DPULSEAUDIO_ENGINE_HEADER=${CMAKE_SOURCE_DIR}/plugin-volume/pulseaudioengine.h
-            -P ${CMAKE_CURRENT_SOURCE_DIR}/check_pulseaudio_shutdown_guard.cmake
-)
-
-add_test(
     NAME plugin_volume_keyboard_notification_setting_removed_guard
     COMMAND ${CMAKE_COMMAND}
             -DONEG4_VOLUME_SOURCE=${CMAKE_SOURCE_DIR}/plugin-volume/oneg4volume.cpp
@@ -129,7 +114,6 @@ add_test(
             -DONEG4_VOLUME_LOGGING_HEADER=${CMAKE_SOURCE_DIR}/plugin-volume/volumelogging.h
             -DONEG4_VOLUME_LOGGING_SOURCE=${CMAKE_SOURCE_DIR}/plugin-volume/volumelogging.cpp
             -DONEG4_VOLUME_SOURCE=${CMAKE_SOURCE_DIR}/plugin-volume/oneg4volume.cpp
-            -DPULSEAUDIO_ENGINE_SOURCE=${CMAKE_SOURCE_DIR}/plugin-volume/pulseaudioengine.cpp
             -DPIPEWIRE_ENGINE_SOURCE=${CMAKE_SOURCE_DIR}/plugin-volume/pipewireengine.cpp
             -DWIREPLUMBER_POLICY_SOURCE=${CMAKE_SOURCE_DIR}/plugin-volume/wireplumberpolicy.cpp
             -P ${CMAKE_CURRENT_SOURCE_DIR}/check_volume_logging_categories_guard.cmake
@@ -145,6 +129,23 @@ add_test(
             -DVOLUME_POPUP_SOURCE=${CMAKE_SOURCE_DIR}/plugin-volume/volumepopup.cpp
             -DVOLUME_PLUGIN_DESKTOP=${CMAKE_SOURCE_DIR}/plugin-volume/resources/volume.desktop.in
             -P ${CMAKE_CURRENT_SOURCE_DIR}/check_volume_configuration_dialog_guard.cmake
+)
+
+add_test(
+    NAME plugin_volume_pipewire_only_backend_guard
+    COMMAND ${CMAKE_COMMAND}
+            -DVOLUME_PLUGIN_CMAKE=${CMAKE_SOURCE_DIR}/plugin-volume/CMakeLists.txt
+            -DONEG4_VOLUME_SOURCE=${CMAKE_SOURCE_DIR}/plugin-volume/oneg4volume.cpp
+            -DONEG4_VOLUME_HEADER=${CMAKE_SOURCE_DIR}/plugin-volume/oneg4volume.h
+            -DONEG4_VOLUME_CONFIGURATION_SOURCE=${CMAKE_SOURCE_DIR}/plugin-volume/oneg4volumeconfiguration.cpp
+            -P ${CMAKE_CURRENT_SOURCE_DIR}/check_volume_pipewire_only_backend_guard.cmake
+)
+
+add_test(
+    NAME plugin_volume_no_libpulse_runtime_guard
+    COMMAND ${CMAKE_COMMAND}
+            -DVOLUME_PLUGIN_SO=$<TARGET_FILE:volume>
+            -P ${CMAKE_CURRENT_SOURCE_DIR}/check_volume_no_libpulse_runtime_guard.cmake
 )
 
 add_test(

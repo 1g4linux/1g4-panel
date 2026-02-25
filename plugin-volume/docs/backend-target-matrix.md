@@ -33,6 +33,6 @@ This document defines the control-stack target for the volume plugin rewrite.
   - Keep core volume/mute/default routing controls active.
   - Show capability fields as unavailable rather than silently omitting state transitions.
 
-## Transition note
+## Status
 
-- This matrix is the rewrite target. Remaining PulseAudio/libpulse paths are tracked separately in `TODO.md` and are not considered complete yet.
+- The plugin build/runtime path is restricted to PipeWire + WirePlumber + BlueZ, with no PulseAudio/libpulse control dependency.

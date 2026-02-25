@@ -40,7 +40,6 @@ VolumeButton::VolumeButton(IOneG4PanelPlugin* plugin, QWidget* parent)
   connect(m_volumePopup, &VolumePopup::mouseEntered, &m_popupHideTimer, &QTimer::stop);
   connect(m_volumePopup, &VolumePopup::mouseLeft, this, [this] { m_popupHideTimer.start(); });
 
-  connect(m_volumePopup, &VolumePopup::launchMixer, this, &VolumeButton::handleMixerLaunch);
   connect(m_volumePopup, &VolumePopup::stockIconChanged, this, &VolumeButton::handleStockIconChanged);
 }
 
@@ -117,10 +116,6 @@ void VolumeButton::hideVolumeSlider() {
   if (m_volumePopup) {
     m_volumePopup->hide();
   }
-}
-
-void VolumeButton::handleMixerLaunch() {
-  emit mixerRequested();
 }
 
 void VolumeButton::handleStockIconChanged(const QString& iconName) {

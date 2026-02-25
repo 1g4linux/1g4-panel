@@ -32,7 +32,6 @@ class VolumePopup : public QDialog {
 
   // void volumeChanged(int value);
   void deviceChanged();
-  void launchMixer();
   void stockIconChanged(const QString& iconName);
 
  protected:
@@ -53,7 +52,6 @@ class VolumePopup : public QDialog {
   void updateStockIcon();
 
   QSlider* m_volumeSlider;
-  QPushButton* m_mixerButton;
   QPushButton* m_muteToggleButton;
   QPoint m_pos;
   Qt::Corner m_anchor;

@@ -1,10 +1,10 @@
 # WirePlumber modernization notes
 
-This plugin now assumes PipeWire/WirePlumber as the primary backend and only falls back to PulseAudio when PipeWire is missing. The goal is to keep live control of sinks/sources while persisting enable/disable policy through WirePlumber rules.
+This plugin now targets a PipeWire/WirePlumber control path only. The goal is to keep live control of sinks/sources while persisting enable/disable policy through WirePlumber rules.
 
 ## Runtime layer
-- Keep using the PipeWire backend for live volume/mute and routing; replace remaining PulseAudio calls with WirePlumber/libpipewire as you touch code.
-- Expose sinks/sources and streams as Qt models; prefer the `media.class` values that PipeWire/WirePlumber publish instead of PulseAudio naming.
+- Keep using the PipeWire backend for live volume/mute and routing.
+- Expose sinks/sources and streams as Qt models; prefer the `media.class` values that PipeWire/WirePlumber publish.
 
 ## Persistent policy layer
 - Device/node enable/disable is stored as SPA-JSON in `~/.config/wireplumber/wireplumber.conf.d/60-1g4-panel-volume.conf`.
@@ -29,5 +29,4 @@ policy.restart(); // optional; show UI hint before calling
 
 ## Follow-ups
 - Replace `pactl` calls in `PipeWireEngine` with WirePlumber metadata updates.
-- Swap 1g4-mixer’s libpulse dependency with a WirePlumber-driven view model using the same widgets.
 - Add tests for SPA-JSON generation to guard the policy file format.

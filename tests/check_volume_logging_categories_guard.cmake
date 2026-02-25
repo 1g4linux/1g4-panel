@@ -7,9 +7,6 @@ endif()
 if(NOT DEFINED ONEG4_VOLUME_SOURCE)
     message(FATAL_ERROR "ONEG4_VOLUME_SOURCE is required")
 endif()
-if(NOT DEFINED PULSEAUDIO_ENGINE_SOURCE)
-    message(FATAL_ERROR "PULSEAUDIO_ENGINE_SOURCE is required")
-endif()
 if(NOT DEFINED PIPEWIRE_ENGINE_SOURCE)
     message(FATAL_ERROR "PIPEWIRE_ENGINE_SOURCE is required")
 endif()
@@ -20,7 +17,6 @@ endif()
 file(READ "${ONEG4_VOLUME_LOGGING_HEADER}" ONEG4_VOLUME_LOGGING_HEADER_CONTENT)
 file(READ "${ONEG4_VOLUME_LOGGING_SOURCE}" ONEG4_VOLUME_LOGGING_SOURCE_CONTENT)
 file(READ "${ONEG4_VOLUME_SOURCE}" ONEG4_VOLUME_CONTENT)
-file(READ "${PULSEAUDIO_ENGINE_SOURCE}" PULSEAUDIO_ENGINE_CONTENT)
 file(READ "${PIPEWIRE_ENGINE_SOURCE}" PIPEWIRE_ENGINE_CONTENT)
 file(READ "${WIREPLUMBER_POLICY_SOURCE}" WIREPLUMBER_POLICY_CONTENT)
 
@@ -48,14 +44,9 @@ foreach(CATEGORY_DEF
     endif()
 endforeach()
 
-string(FIND "${ONEG4_VOLUME_CONTENT}" "qCWarning(lcVolumeUi)" UI_WARNING_POS)
-if(UI_WARNING_POS EQUAL -1)
-    message(FATAL_ERROR "Expected qCWarning(lcVolumeUi) usage is missing")
-endif()
-
-string(FIND "${PULSEAUDIO_ENGINE_CONTENT}" "qCWarning(lcVolumeBackend)" PA_BACKEND_WARNING_POS)
-if(PA_BACKEND_WARNING_POS EQUAL -1)
-    message(FATAL_ERROR "Expected qCWarning(lcVolumeBackend) usage in PulseAudio engine is missing")
+string(FIND "${ONEG4_VOLUME_CONTENT}" "qCDebug(lcVolumeBluetooth)" VOLUME_BLUETOOTH_DEBUG_POS)
+if(VOLUME_BLUETOOTH_DEBUG_POS EQUAL -1)
+    message(FATAL_ERROR "Expected qCDebug(lcVolumeBluetooth) usage in volume plugin entrypoint is missing")
 endif()
 
 string(FIND "${PIPEWIRE_ENGINE_CONTENT}" "qCWarning(lcVolumeBackend)" PW_BACKEND_WARNING_POS)
@@ -80,7 +71,6 @@ endif()
 
 foreach(FILE_CONTENT
         ONEG4_VOLUME_CONTENT
-        PULSEAUDIO_ENGINE_CONTENT
         PIPEWIRE_ENGINE_CONTENT
         WIREPLUMBER_POLICY_CONTENT)
     string(FIND "${${FILE_CONTENT}}" "qWarning(" RAW_WARNING_POS)

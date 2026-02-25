@@ -27,7 +27,6 @@ class VolumeButton : public QToolButton {
 
  signals:
   void deviceChanged();
-  void mixerRequested();
 
  protected:
   void enterEvent(QEnterEvent* event) override;
@@ -37,7 +36,6 @@ class VolumeButton : public QToolButton {
 
  private slots:
   void toggleVolumeSlider();
-  void handleMixerLaunch();
   void handleStockIconChanged(const QString& iconName);
 
  private:

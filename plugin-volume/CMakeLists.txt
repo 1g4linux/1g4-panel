@@ -42,29 +42,9 @@ include_directories(SYSTEM ${PIPEWIRE_INCLUDE_DIRS})
 set(LIBRARIES ${LIBRARIES} ${PIPEWIRE_LIBRARIES})
 message(STATUS "Volume plugin: PipeWire backend available")
 
-# PulseAudio backend
-pkg_check_modules(PULSEAUDIO libpulse)
-if(PULSEAUDIO_FOUND)
-  add_definitions(-DUSE_PULSEAUDIO)
-  include_directories(SYSTEM ${PULSEAUDIO_INCLUDE_DIRS})
-  set(LIBRARIES ${LIBRARIES} ${PULSEAUDIO_LIBRARIES})
-  message(STATUS "Volume plugin: PulseAudio backend available")
-else()
-  message(STATUS "Volume plugin: PulseAudio backend not available")
-endif()
-
-# Conditionally add engine sources and headers
-if(PIPEWIRE_FOUND)
-  set(SOURCES ${SOURCES} pipewireengine.cpp)
-  set(HEADERS ${HEADERS} pipewireengine.h)
-  set(MOCS ${MOCS} pipewireengine.h)
-endif()
-
-if(PULSEAUDIO_FOUND)
-  set(SOURCES ${SOURCES} pulseaudioengine.cpp)
-  set(HEADERS ${HEADERS} pulseaudioengine.h)
-  set(MOCS ${MOCS} pulseaudioengine.h)
-endif()
+set(SOURCES ${SOURCES} pipewireengine.cpp)
+set(HEADERS ${HEADERS} pipewireengine.h)
+set(MOCS ${MOCS} pipewireengine.h)
 
 if(ONEG4_VOLUME_DEV_TEST_BACKENDS)
   set(SOURCES ${SOURCES} testaudioengine.cpp)
@@ -72,15 +52,7 @@ if(ONEG4_VOLUME_DEV_TEST_BACKENDS)
   set(MOCS ${MOCS} testaudioengine.h)
 endif()
 
-add_subdirectory(1g4-mixer)
-
-include_directories(${CMAKE_CURRENT_SOURCE_DIR}/1g4-mixer/src)
-
-
-set(LIBRARIES ${LIBRARIES} 1g4-mixer)
-
 BUILD_ONEG4_PLUGIN(${PLUGIN})
-target_compile_definitions(${PLUGIN} PRIVATE ONEG4_MIXER_LIBRARY=1)
 if(ONEG4_VOLUME_DEV_VERBOSE_LOGGING)
   target_compile_definitions(${PLUGIN} PRIVATE ONEG4_VOLUME_DEV_VERBOSE_LOGGING=1)
 endif()

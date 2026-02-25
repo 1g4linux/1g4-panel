@@ -8,7 +8,6 @@
 
 #include <OneG4/XdgIcon.h>
 
-#include <QApplication>
 #include <QCursor>
 #include <QDialog>
 #include <QEnterEvent>
@@ -17,7 +16,6 @@
 #include <QResizeEvent>
 #include <QScreen>
 #include <QSlider>
-#include <QStyleOptionButton>
 #include <QTimer>
 #include <QToolTip>
 #include <QVBoxLayout>
@@ -31,14 +29,6 @@ VolumePopup::VolumePopup(QWidget* parent)
       m_pos(0, 0),
       m_anchor(Qt::TopLeftCorner),
       m_device(nullptr) {
-  m_mixerButton = new QPushButton(this);
-  m_mixerButton->setObjectName(QStringLiteral("MixerLink"));
-  m_mixerButton->setMinimumWidth(1);
-  m_mixerButton->setToolTip(tr("Launch mixer"));
-  m_mixerButton->setIcon(XdgIcon::fromTheme(QLatin1String("audio-card")));
-  m_mixerButton->setIconSize(QSize(16, 16));
-  m_mixerButton->setAutoDefault(false);
-
   m_volumeSlider = new QSlider(Qt::Vertical, this);
   m_volumeSlider->setTickPosition(QSlider::TicksBothSides);
   m_volumeSlider->setTickInterval(10);
@@ -54,11 +44,9 @@ VolumePopup::VolumePopup(QWidget* parent)
   layout->setSpacing(0);
   layout->setContentsMargins(QMargins());
 
-  layout->addWidget(m_mixerButton, 0, Qt::AlignHCenter);
   layout->addWidget(m_volumeSlider, 0, Qt::AlignHCenter);
   layout->addWidget(m_muteToggleButton, 0, Qt::AlignHCenter);
 
-  connect(m_mixerButton, &QPushButton::clicked, this, &VolumePopup::launchMixer);
   connect(m_volumeSlider, &QSlider::valueChanged, this, &VolumePopup::handleSliderValueChanged);
   connect(m_muteToggleButton, &QPushButton::clicked, this, &VolumePopup::handleMuteToggleClicked);
 }

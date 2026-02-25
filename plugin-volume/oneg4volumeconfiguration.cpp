@@ -167,19 +167,17 @@ void OneG4VolumeConfiguration::loadSettings() {
 
   // Populate audio backend combo
   ui->audioBackendCombo->clear();
-#ifdef USE_PULSEAUDIO
-  ui->audioBackendCombo->addItem(QLatin1String("PulseAudio"));
-#endif
-#ifdef USE_PIPEWIRE
   ui->audioBackendCombo->addItem(QLatin1String("PipeWire"));
-#endif
 #ifdef ONEG4_VOLUME_DEV_TEST_BACKENDS
   ui->audioBackendCombo->addItem(QLatin1String("TestBackend"));
 #endif
-  // If no backends, combo will be empty (should not happen)
+
   const QString currentBackend =
       settings().value(QStringLiteral(SETTINGS_AUDIO_ENGINE), QStringLiteral(SETTINGS_DEFAULT_AUDIO_ENGINE)).toString();
   int backendIndex = ui->audioBackendCombo->findText(currentBackend);
+  if (backendIndex < 0 && ui->audioBackendCombo->count() > 0) {
+    backendIndex = 0;
+  }
   if (backendIndex >= 0) {
     ui->audioBackendCombo->setCurrentIndex(backendIndex);
   }
