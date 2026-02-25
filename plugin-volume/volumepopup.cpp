@@ -40,16 +40,21 @@ VolumePopup::VolumePopup(QWidget* parent)
   m_muteToggleButton->setCheckable(true);
   m_muteToggleButton->setAutoDefault(false);
 
-  m_externalMixerButton = new QPushButton(tr("Mixer"), this);
+  m_externalMixerButton = new QPushButton(this);
+  m_externalMixerButton->setObjectName(QStringLiteral("MixerLink"));
+  m_externalMixerButton->setToolTip(tr("Launch mixer"));
+  m_externalMixerButton->setIcon(XdgIcon::fromTheme(QLatin1String("audio-card")));
+  m_externalMixerButton->setIconSize(QSize(16, 16));
+  m_externalMixerButton->setMinimumWidth(1);
   m_externalMixerButton->setAutoDefault(false);
 
   auto* layout = new QVBoxLayout(this);
   layout->setSpacing(0);
   layout->setContentsMargins(QMargins());
 
+  layout->addWidget(m_externalMixerButton, 0, Qt::AlignHCenter);
   layout->addWidget(m_volumeSlider, 0, Qt::AlignHCenter);
   layout->addWidget(m_muteToggleButton, 0, Qt::AlignHCenter);
-  layout->addWidget(m_externalMixerButton, 0, Qt::AlignHCenter);
 
   connect(m_volumeSlider, &QSlider::valueChanged, this, &VolumePopup::handleSliderValueChanged);
   connect(m_muteToggleButton, &QPushButton::clicked, this, &VolumePopup::handleMuteToggleClicked);

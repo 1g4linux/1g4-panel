@@ -22,7 +22,12 @@ foreach(POPUP_HEADER_CHECK
 endforeach()
 
 foreach(POPUP_SOURCE_CHECK
-        "m_externalMixerButton = new QPushButton(tr(\"Mixer\"), this);"
+        "m_externalMixerButton = new QPushButton(this);"
+        "m_externalMixerButton->setObjectName(QStringLiteral(\"MixerLink\"));"
+        "m_externalMixerButton->setToolTip(tr(\"Launch mixer\"));"
+        "m_externalMixerButton->setIcon(XdgIcon::fromTheme(QLatin1String(\"audio-card\")));"
+        "m_externalMixerButton->setAutoDefault(false);"
+        "layout->addWidget(m_externalMixerButton, 0, Qt::AlignHCenter);"
         "connect(m_externalMixerButton, &QPushButton::clicked, this, &VolumePopup::handleExternalMixerClicked);"
         "void VolumePopup::handleExternalMixerClicked()"
         "emit externalMixerRequested();")
