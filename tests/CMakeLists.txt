@@ -25,6 +25,23 @@ add_test(
     COMMAND plugin_volume_audioengine_ignoremaxvolume_test
 )
 
+add_executable(plugin_volume_plugin_load_test
+    plugin_volume_plugin_load_test.cpp
+    ${CMAKE_SOURCE_DIR}/panel/pluginsettings.cpp
+    ${CMAKE_SOURCE_DIR}/panel/oneg4panelpluginconfigdialog.cpp
+)
+target_include_directories(plugin_volume_plugin_load_test PRIVATE ${CMAKE_SOURCE_DIR} ${CMAKE_SOURCE_DIR}/panel)
+target_link_libraries(plugin_volume_plugin_load_test PRIVATE Qt6::Core Qt6::Test Qt6::Widgets oneg4-compat)
+set_target_properties(plugin_volume_plugin_load_test PROPERTIES ENABLE_EXPORTS ON)
+
+add_test(
+    NAME plugin_volume_plugin_load_test
+    COMMAND ${CMAKE_COMMAND} -E env
+            ONEG4_VOLUME_PLUGIN_PATH=$<TARGET_FILE:volume>
+            ONEG4_VOLUME_DESKTOP_PATH=${CMAKE_SOURCE_DIR}/plugin-volume/resources/volume.desktop.in
+            $<TARGET_FILE:plugin_volume_plugin_load_test>
+)
+
 add_test(
     NAME plugin_volume_preprocessor_fallback_guard
     COMMAND ${CMAKE_COMMAND}
@@ -116,4 +133,31 @@ add_test(
             -DPIPEWIRE_ENGINE_SOURCE=${CMAKE_SOURCE_DIR}/plugin-volume/pipewireengine.cpp
             -DWIREPLUMBER_POLICY_SOURCE=${CMAKE_SOURCE_DIR}/plugin-volume/wireplumberpolicy.cpp
             -P ${CMAKE_CURRENT_SOURCE_DIR}/check_volume_logging_categories_guard.cmake
+)
+
+add_test(
+    NAME plugin_volume_configuration_dialog_guard
+    COMMAND ${CMAKE_COMMAND}
+            -DONEG4_VOLUME_HEADER=${CMAKE_SOURCE_DIR}/plugin-volume/oneg4volume.h
+            -DONEG4_VOLUME_SOURCE=${CMAKE_SOURCE_DIR}/plugin-volume/oneg4volume.cpp
+            -DONEG4_VOLUME_CONFIGURATION_UI=${CMAKE_SOURCE_DIR}/plugin-volume/oneg4volumeconfiguration.ui
+            -DVOLUME_BUTTON_SOURCE=${CMAKE_SOURCE_DIR}/plugin-volume/volumebutton.cpp
+            -DVOLUME_POPUP_SOURCE=${CMAKE_SOURCE_DIR}/plugin-volume/volumepopup.cpp
+            -DVOLUME_PLUGIN_DESKTOP=${CMAKE_SOURCE_DIR}/plugin-volume/resources/volume.desktop.in
+            -P ${CMAKE_CURRENT_SOURCE_DIR}/check_volume_configuration_dialog_guard.cmake
+)
+
+add_test(
+    NAME plugin_volume_backend_target_matrix_doc_guard
+    COMMAND ${CMAKE_COMMAND}
+            -DVOLUME_BACKEND_TARGET_DOC=${CMAKE_SOURCE_DIR}/plugin-volume/docs/backend-target-matrix.md
+            -DONEG4_PANEL_CMAKE=${CMAKE_SOURCE_DIR}/CMakeLists.txt
+            -P ${CMAKE_CURRENT_SOURCE_DIR}/check_volume_backend_target_matrix_doc_guard.cmake
+)
+
+add_test(
+    NAME plugin_volume_design_decisions_doc_guard
+    COMMAND ${CMAKE_COMMAND}
+            -DVOLUME_DESIGN_DECISIONS_DOC=${CMAKE_SOURCE_DIR}/plugin-volume/docs/design-decisions.md
+            -P ${CMAKE_CURRENT_SOURCE_DIR}/check_volume_design_decisions_doc_guard.cmake
 )

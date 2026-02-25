@@ -15,9 +15,12 @@ foreach(REQUIRED_QT_COMPONENT
 endforeach()
 
 foreach(REQUIRED_CHECK
-        "pkg_check_modules(PIPEWIRE QUIET libpipewire-0.3)"
-        "pkg_check_modules(WIREPLUMBER QUIET wireplumber-0.5)"
-        "pkg_check_modules(BLUEZ QUIET bluez)")
+        "set(ONEG4_VOLUME_MIN_PIPEWIRE_VERSION \"0.3.0\")"
+        "set(ONEG4_VOLUME_MIN_WIREPLUMBER_VERSION \"0.5.0\")"
+        "set(ONEG4_VOLUME_MIN_BLUEZ_VERSION \"5.0\")"
+        "pkg_check_modules(PIPEWIRE QUIET libpipewire-0.3>=\${ONEG4_VOLUME_MIN_PIPEWIRE_VERSION})"
+        "pkg_check_modules(WIREPLUMBER QUIET wireplumber-0.5>=\${ONEG4_VOLUME_MIN_WIREPLUMBER_VERSION})"
+        "pkg_check_modules(BLUEZ QUIET bluez>=\${ONEG4_VOLUME_MIN_BLUEZ_VERSION})")
     string(FIND "${ONEG4_PANEL_CMAKE_CONTENT}" "${REQUIRED_CHECK}" CHECK_POS)
     if(CHECK_POS EQUAL -1)
         message(FATAL_ERROR "Missing dependency probe: ${REQUIRED_CHECK}")
@@ -25,9 +28,12 @@ foreach(REQUIRED_CHECK
 endforeach()
 
 foreach(REQUIRED_ERROR
-        "Volume plugin requires PipeWire development files (pkg-config module: libpipewire-0.3)"
-        "Volume plugin requires WirePlumber development files (pkg-config module: wireplumber-0.5)"
-        "Volume plugin requires BlueZ development files (pkg-config module: bluez)")
+        "Volume plugin requires PipeWire development files "
+        "(pkg-config module: libpipewire-0.3 >= \${ONEG4_VOLUME_MIN_PIPEWIRE_VERSION})"
+        "Volume plugin requires WirePlumber development files "
+        "(pkg-config module: wireplumber-0.5 >= \${ONEG4_VOLUME_MIN_WIREPLUMBER_VERSION})"
+        "Volume plugin requires BlueZ development files "
+        "(pkg-config module: bluez >= \${ONEG4_VOLUME_MIN_BLUEZ_VERSION})")
     string(FIND "${ONEG4_PANEL_CMAKE_CONTENT}" "${REQUIRED_ERROR}" ERROR_POS)
     if(ERROR_POS EQUAL -1)
         message(FATAL_ERROR "Missing clear configure-time error message: ${REQUIRED_ERROR}")

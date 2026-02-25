@@ -270,19 +270,29 @@ endif()
 setByDefault(VOLUME_PLUGIN Yes)
 if(VOLUME_PLUGIN)
     find_package(PkgConfig REQUIRED)
-    pkg_check_modules(PIPEWIRE QUIET libpipewire-0.3)
+    set(ONEG4_VOLUME_MIN_PIPEWIRE_VERSION "0.3.0")
+    set(ONEG4_VOLUME_MIN_WIREPLUMBER_VERSION "0.5.0")
+    set(ONEG4_VOLUME_MIN_BLUEZ_VERSION "5.0")
+
+    pkg_check_modules(PIPEWIRE QUIET libpipewire-0.3>=${ONEG4_VOLUME_MIN_PIPEWIRE_VERSION})
     if(NOT PIPEWIRE_FOUND)
-        message(FATAL_ERROR "Volume plugin requires PipeWire development files (pkg-config module: libpipewire-0.3)")
+        message(FATAL_ERROR
+            "Volume plugin requires PipeWire development files "
+            "(pkg-config module: libpipewire-0.3 >= ${ONEG4_VOLUME_MIN_PIPEWIRE_VERSION})")
     endif()
 
-    pkg_check_modules(WIREPLUMBER QUIET wireplumber-0.5)
+    pkg_check_modules(WIREPLUMBER QUIET wireplumber-0.5>=${ONEG4_VOLUME_MIN_WIREPLUMBER_VERSION})
     if(NOT WIREPLUMBER_FOUND)
-        message(FATAL_ERROR "Volume plugin requires WirePlumber development files (pkg-config module: wireplumber-0.5)")
+        message(FATAL_ERROR
+            "Volume plugin requires WirePlumber development files "
+            "(pkg-config module: wireplumber-0.5 >= ${ONEG4_VOLUME_MIN_WIREPLUMBER_VERSION})")
     endif()
 
-    pkg_check_modules(BLUEZ QUIET bluez)
+    pkg_check_modules(BLUEZ QUIET bluez>=${ONEG4_VOLUME_MIN_BLUEZ_VERSION})
     if(NOT BLUEZ_FOUND)
-        message(FATAL_ERROR "Volume plugin requires BlueZ development files (pkg-config module: bluez)")
+        message(FATAL_ERROR
+            "Volume plugin requires BlueZ development files "
+            "(pkg-config module: bluez >= ${ONEG4_VOLUME_MIN_BLUEZ_VERSION})")
     endif()
 
     list(APPEND ENABLED_PLUGINS   "Volume")
