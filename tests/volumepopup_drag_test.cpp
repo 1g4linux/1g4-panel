@@ -52,6 +52,9 @@ class VolumePopupDragTest : public QObject {
  private slots:
   void backendVolumeUpdatesDoNotMoveSliderWhileDragging();
   void staleDeferredBackendVolumeIsDiscardedAfterFurtherDrag();
+  void backendUnavailableShowsErrorIconAndDisablesControls();
+  void noDeviceStateSurfacesExplicitStatus();
+  void backendRecoveryRestoresInteractiveVolumeState();
   void offUiThreadVolumeUpdateIsRescheduledToUiThread();
 };
 
@@ -102,6 +105,61 @@ void VolumePopupDragTest::staleDeferredBackendVolumeIsDiscardedAfterFurtherDrag(
   slider->setValue(80);
   slider->setSliderDown(false);
   QCOMPARE(slider->value(), 80);
+}
+
+void VolumePopupDragTest::backendUnavailableShowsErrorIconAndDisablesControls() {
+  VolumePopupDummyEngine engine;
+  AudioDevice* sink = engine.addSink(QStringLiteral("alsa_output.popup-backend"), 35);
+  QVERIFY(sink != nullptr);
+
+  VolumePopup popup;
+  popup.setDevice(sink);
+  QSlider* slider = popup.volumeSlider();
+  QVERIFY(slider != nullptr);
+
+  QSignalSpy stockIconSpy(&popup, &VolumePopup::stockIconChanged);
+  popup.setBackendAvailable(false, QStringLiteral("PipeWire backend unavailable"));
+
+  QCOMPARE(slider->isEnabled(), false);
+  QCOMPARE(slider->toolTip(), QStringLiteral("Audio backend unavailable: PipeWire backend unavailable"));
+  QVERIFY(!stockIconSpy.isEmpty());
+  QCOMPARE(stockIconSpy.last().at(0).toString(), QStringLiteral("dialog-error-panel"));
+}
+
+void VolumePopupDragTest::noDeviceStateSurfacesExplicitStatus() {
+  VolumePopup popup;
+  QSlider* slider = popup.volumeSlider();
+  QVERIFY(slider != nullptr);
+
+  QSignalSpy stockIconSpy(&popup, &VolumePopup::stockIconChanged);
+
+  popup.setBackendAvailable(false, QStringLiteral("temporary outage"));
+  popup.setBackendAvailable(true, QString());
+
+  QCOMPARE(slider->isEnabled(), false);
+  QCOMPARE(slider->toolTip(), QStringLiteral("No audio output device"));
+  QVERIFY(!stockIconSpy.isEmpty());
+  QCOMPARE(stockIconSpy.last().at(0).toString(), QStringLiteral("audio-volume-muted-panel"));
+}
+
+void VolumePopupDragTest::backendRecoveryRestoresInteractiveVolumeState() {
+  VolumePopupDummyEngine engine;
+  AudioDevice* sink = engine.addSink(QStringLiteral("alsa_output.popup-recovery"), 20);
+  QVERIFY(sink != nullptr);
+
+  VolumePopup popup;
+  popup.setDevice(sink);
+  QSlider* slider = popup.volumeSlider();
+  QVERIFY(slider != nullptr);
+
+  QSignalSpy stockIconSpy(&popup, &VolumePopup::stockIconChanged);
+  popup.setBackendAvailable(false, QStringLiteral("PipeWire stopped"));
+  popup.setBackendAvailable(true, QString());
+
+  QCOMPARE(slider->isEnabled(), true);
+  QCOMPARE(slider->toolTip(), QStringLiteral("20%"));
+  QVERIFY(!stockIconSpy.isEmpty());
+  QCOMPARE(stockIconSpy.last().at(0).toString(), QStringLiteral("audio-volume-low-panel"));
 }
 
 class WorkerVolumeUpdateInvoker : public QObject {

@@ -97,8 +97,10 @@ void OneG4Volume::setAudioEngine(AudioEngine* engine) {
   m_engine = engine;
 
   connect(m_engine, &AudioEngine::sinkListChanged, this, &OneG4Volume::handleSinkListChanged, Qt::QueuedConnection);
+  connect(m_engine, &AudioEngine::stateChanged, this, &OneG4Volume::handleEngineStateChanged, Qt::QueuedConnection);
 
   handleSinkListChanged();
+  handleEngineStateChanged();
 }
 
 void OneG4Volume::settingsChanged() {
@@ -243,6 +245,37 @@ void OneG4Volume::handleSinkListChanged() {
   if (m_configDialog) {
     m_configDialog->setSinkList(sinks);
   }
+}
+
+void OneG4Volume::handleEngineStateChanged() {
+  if (QThread::currentThread() != thread()) {
+    QPointer<OneG4Volume> self(this);
+    QMetaObject::invokeMethod(
+        this,
+        [self]() {
+          if (!self) {
+            return;
+          }
+          self->handleEngineStateChanged();
+        },
+        Qt::QueuedConnection);
+    return;
+  }
+
+  if (!m_volumeButton || !m_volumeButton->volumePopup()) {
+    return;
+  }
+
+  if (!m_engine) {
+    m_volumeButton->volumePopup()->setBackendAvailable(false, tr("No audio engine is available"));
+    return;
+  }
+
+  const AudioEngine::BackendHealthSnapshot health = m_engine->backendHealth();
+  const bool backendAvailable = health.state == AudioEngine::BackendHealthState::Ready ||
+                                health.state == AudioEngine::BackendHealthState::Unknown;
+
+  m_volumeButton->volumePopup()->setBackendAvailable(backendAvailable, health.message);
 }
 
 QWidget* OneG4Volume::widget() {

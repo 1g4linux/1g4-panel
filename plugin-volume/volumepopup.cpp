@@ -33,7 +33,9 @@ VolumePopup::VolumePopup(QWidget* parent)
       m_device(nullptr),
       m_sliderDragActive(false),
       m_hasDeferredBackendVolume(false),
-      m_deferredBackendVolumePercent(0) {
+      m_deferredBackendVolumePercent(0),
+      m_backendAvailable(true),
+      m_backendStatusMessage() {
   m_volumeSlider = new QSlider(Qt::Vertical, this);
   m_volumeSlider->setTickPosition(QSlider::TicksBothSides);
   m_volumeSlider->setTickInterval(10);
@@ -66,6 +68,9 @@ VolumePopup::VolumePopup(QWidget* parent)
   connect(m_volumeSlider, &QSlider::sliderReleased, this, &VolumePopup::handleSliderReleased);
   connect(m_muteToggleButton, &QPushButton::clicked, this, &VolumePopup::handleMuteToggleClicked);
   connect(m_externalMixerButton, &QPushButton::clicked, this, &VolumePopup::handleExternalMixerClicked);
+
+  updateControlAvailability();
+  updateStatusToolTip();
 }
 
 bool VolumePopup::event(QEvent* event) {
@@ -93,7 +98,7 @@ void VolumePopup::leaveEvent(QEvent* /*event*/) {
 }
 
 void VolumePopup::handleSliderValueChanged(int value) {
-  if (!m_device) {
+  if (!m_backendAvailable || !m_device) {
     return;
   }
 
@@ -103,7 +108,7 @@ void VolumePopup::handleSliderValueChanged(int value) {
   }
 
   m_device->setVolume(value);
-  m_volumeSlider->setToolTip(QStringLiteral("%1%").arg(value));
+  updateStatusToolTip();
 
   QTimer::singleShot(0, this, [this] { QToolTip::showText(QCursor::pos(), m_volumeSlider->toolTip(), this); });
 }
@@ -183,6 +188,12 @@ void VolumePopup::handleDeviceMuteChanged(bool mute) {
 }
 
 void VolumePopup::updateStockIcon() {
+  if (!m_backendAvailable) {
+    m_muteToggleButton->setIcon(XdgIcon::fromTheme(QLatin1String("dialog-error-panel")));
+    emit stockIconChanged(QStringLiteral("dialog-error-panel"));
+    return;
+  }
+
   if (!m_device) {
     m_muteToggleButton->setIcon(XdgIcon::fromTheme(QLatin1String("audio-volume-muted-panel")));
     emit stockIconChanged(QStringLiteral("audio-volume-muted-panel"));
@@ -221,6 +232,10 @@ void VolumePopup::openAt(QPoint pos, Qt::Corner anchor) {
 }
 
 void VolumePopup::handleWheelEvent(QWheelEvent* event) {
+  if (!m_backendAvailable || !m_device) {
+    return;
+  }
+
   const int steps = event->angleDelta().y() / QWheelEvent::DefaultDeltasPerStep;
   if (steps == 0) {
     return;
@@ -253,18 +268,32 @@ void VolumePopup::setDevice(AudioDevice* device) {
   else {
     m_volumeSlider->blockSignals(true);
     m_volumeSlider->setValue(0);
-    m_volumeSlider->setToolTip(QStringLiteral("0%"));
     m_volumeSlider->blockSignals(false);
 
-    if (auto* parent = parentWidget()) {
-      parent->setToolTip(m_volumeSlider->toolTip());
-    }
-
     m_muteToggleButton->setChecked(true);
-    updateStockIcon();
   }
 
+  updateControlAvailability();
+  updateStatusToolTip();
+  updateStockIcon();
   emit deviceChanged();
+}
+
+void VolumePopup::setBackendAvailable(bool available, const QString& statusMessage) {
+  const bool availabilityChanged = (m_backendAvailable != available);
+  const QString normalizedStatus = available ? QString() : statusMessage.trimmed();
+  const bool statusChanged = (m_backendStatusMessage != normalizedStatus);
+
+  if (!availabilityChanged && !statusChanged) {
+    return;
+  }
+
+  m_backendAvailable = available;
+  m_backendStatusMessage = normalizedStatus;
+
+  updateControlAvailability();
+  updateStatusToolTip();
+  updateStockIcon();
 }
 
 void VolumePopup::setSliderStep(int step) {
@@ -275,11 +304,34 @@ void VolumePopup::setSliderStep(int step) {
 void VolumePopup::applyVolumeToSlider(int volume) {
   m_volumeSlider->blockSignals(true);
   m_volumeSlider->setValue(volume);
-  m_volumeSlider->setToolTip(QStringLiteral("%1%").arg(volume));
   m_volumeSlider->blockSignals(false);
+  updateStatusToolTip();
+}
 
+void VolumePopup::updateControlAvailability() {
+  const bool controlsEnabled = m_backendAvailable && m_device;
+  m_volumeSlider->setEnabled(controlsEnabled);
+  m_muteToggleButton->setEnabled(controlsEnabled);
+}
+
+void VolumePopup::updateStatusToolTip() {
+  QString tip;
+  if (!m_backendAvailable) {
+    tip = tr("Audio backend unavailable");
+    if (!m_backendStatusMessage.isEmpty()) {
+      tip = tr("Audio backend unavailable: %1").arg(m_backendStatusMessage);
+    }
+  }
+  else if (!m_device) {
+    tip = tr("No audio output device");
+  }
+  else {
+    tip = QStringLiteral("%1%").arg(m_volumeSlider->value());
+  }
+
+  m_volumeSlider->setToolTip(tip);
   if (auto* parent = parentWidget()) {
-    parent->setToolTip(m_volumeSlider->toolTip());
+    parent->setToolTip(tip);
   }
 }
 

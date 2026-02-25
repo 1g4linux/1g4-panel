@@ -36,6 +36,7 @@ class OneG4Volume : public QObject, public IOneG4PanelPlugin {
  protected slots:
   virtual void settingsChanged();
   void handleSinkListChanged();
+  void handleEngineStateChanged();
   void showNotification() const;
   void openExternalMixer();
 

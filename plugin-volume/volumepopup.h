@@ -7,6 +7,7 @@
 
 #include <QDialog>
 #include <QPointer>
+#include <QString>
 
 class QSlider;
 class QPushButton;
@@ -24,6 +25,7 @@ class VolumePopup : public QDialog {
 
   AudioDevice* device() const { return m_device; }
   void setDevice(AudioDevice* device);
+  void setBackendAvailable(bool available, const QString& statusMessage = QString());
   void setSliderStep(int step);
 
  signals:
@@ -55,6 +57,8 @@ class VolumePopup : public QDialog {
   void realign();
   void updateStockIcon();
   void applyVolumeToSlider(int volume);
+  void updateControlAvailability();
+  void updateStatusToolTip();
 
   QSlider* m_volumeSlider;
   QPushButton* m_muteToggleButton;
@@ -65,6 +69,8 @@ class VolumePopup : public QDialog {
   bool m_sliderDragActive;
   bool m_hasDeferredBackendVolume;
   int m_deferredBackendVolumePercent;
+  bool m_backendAvailable;
+  QString m_backendStatusMessage;
 };
 
 #endif  // VOLUMEPOPUP_H
