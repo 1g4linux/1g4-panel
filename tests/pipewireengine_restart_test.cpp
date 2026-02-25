@@ -12,6 +12,7 @@ class PipeWireEngineRestartTest : public QObject {
 
  private slots:
   void disconnectContextPurgesFakeRuntimeNodes();
+  void metadataDefaultNodeUpdatesAffectStateSnapshot();
 };
 
 void PipeWireEngineRestartTest::disconnectContextPurgesFakeRuntimeNodes() {
@@ -50,6 +51,50 @@ void PipeWireEngineRestartTest::disconnectContextPurgesFakeRuntimeNodes() {
                     return endpoint.runtimeId == kFakeSinkId || endpoint.runtimeId == kFakeSourceId;
                   });
   QVERIFY(!staleEndpointStillPresent);
+}
+
+void PipeWireEngineRestartTest::metadataDefaultNodeUpdatesAffectStateSnapshot() {
+  PipeWireEngine engine;
+  engine.m_reconnectionTimer.stop();
+
+  constexpr uint32_t kFakeSinkId = 4'000'000'003U;
+  constexpr uint32_t kFakeSourceId = 4'000'000'004U;
+
+  engine.addOrUpdateNode(kFakeSinkId, QStringLiteral("alsa_output.default_sink"), QStringLiteral("Default Sink"), Sink,
+                         12, QStringLiteral("analog-stereo"));
+  engine.addOrUpdateNode(kFakeSourceId, QStringLiteral("alsa_input.default_source"),
+                         QStringLiteral("Default Source"), Source, 12, QStringLiteral("analog-stereo"));
+
+  PipeWireEngine::onMetadataProperty(&engine, 0U, "default.audio.sink", "Spa:String",
+                                     "{\"name\":\"alsa_output.default_sink\"}");
+  PipeWireEngine::onMetadataProperty(&engine, 0U, "default.audio.source", "Spa:String",
+                                     "{\"name\":\"alsa_input.default_source\"}");
+  QCoreApplication::processEvents();
+
+  AudioEngine::StateSnapshot state = engine.stateSnapshot();
+
+  bool sinkIsDefault = false;
+  bool sourceIsDefault = false;
+  for (const AudioEngine::LogicalEndpointSnapshot& endpoint : std::as_const(state.logicalEndpoints)) {
+    if (endpoint.runtimeId == kFakeSinkId) {
+      sinkIsDefault = endpoint.isDefault;
+    }
+    else if (endpoint.runtimeId == kFakeSourceId) {
+      sourceIsDefault = endpoint.isDefault;
+    }
+  }
+  QVERIFY(sinkIsDefault);
+  QVERIFY(sourceIsDefault);
+
+  PipeWireEngine::onMetadataProperty(&engine, 0U, "default.audio.sink", "Spa:String", nullptr);
+  QCoreApplication::processEvents();
+  state = engine.stateSnapshot();
+
+  for (const AudioEngine::LogicalEndpointSnapshot& endpoint : std::as_const(state.logicalEndpoints)) {
+    if (endpoint.runtimeId == kFakeSinkId) {
+      QCOMPARE(endpoint.isDefault, false);
+    }
+  }
 }
 
 QTEST_MAIN(PipeWireEngineRestartTest)

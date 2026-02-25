@@ -6,6 +6,8 @@
 #include "audiodevice.h"
 #include "volumelogging.h"
 
+#include <QJsonDocument>
+#include <QJsonObject>
 #include <QMetaObject>
 #include <QLoggingCategory>
 #include <QPointer>
@@ -28,6 +30,29 @@ struct NodeListenerData {
   PipeWireEngine* engine;
   uint32_t nodeId;
 };
+
+QString parseDefaultNodeName(const char* value) {
+  if (!value) {
+    return {};
+  }
+
+  const QString rawValue = QString::fromUtf8(value).trimmed();
+  if (rawValue.isEmpty() || rawValue == QLatin1String("null")) {
+    return {};
+  }
+
+  QJsonParseError parseError;
+  const QJsonDocument doc = QJsonDocument::fromJson(rawValue.toUtf8(), &parseError);
+  if (parseError.error == QJsonParseError::NoError && doc.isObject()) {
+    return doc.object().value(QStringLiteral("name")).toString().trimmed();
+  }
+
+  if (rawValue.size() >= 2 && rawValue.startsWith(QLatin1Char('"')) && rawValue.endsWith(QLatin1Char('"'))) {
+    return rawValue.mid(1, rawValue.size() - 2).trimmed();
+  }
+
+  return rawValue;
+}
 }  // namespace
 
 PipeWireEngine::PipeWireEngine(QObject* parent)
@@ -41,7 +66,9 @@ PipeWireEngine::PipeWireEngine(QObject* parent)
       m_connecting(false),
       m_isShuttingDown(false),
       m_maximumVolume(150),
-      m_metadataId(SPA_ID_INVALID) {
+      m_metadataId(SPA_ID_INVALID),
+      m_defaultOutputNodeName(),
+      m_defaultInputNodeName() {
   pw_init(nullptr, nullptr);
 
   m_reconnectionTimer.setSingleShot(true);
@@ -246,6 +273,10 @@ void PipeWireEngine::disconnectContext() {
   }
   m_deviceByWpId.clear();
   m_nodeIdByDevice.clear();
+  m_defaultOutputNodeName.clear();
+  m_defaultInputNodeName.clear();
+  setObservedDefaultEndpointStableId(EndpointDirection::Output, QString());
+  setObservedDefaultEndpointStableId(EndpointDirection::Input, QString());
 
   bool removedSink = false;
   for (AudioDevice* device : std::as_const(devicesToDelete)) {
@@ -466,6 +497,24 @@ int PipeWireEngine::onMetadataProperty(void* data,
   if (engine->isShuttingDown())
     return 0;
 
+  if (strcmp(key, "default.audio.sink") == 0 || strcmp(key, "default.audio.source") == 0) {
+    const EndpointDirection direction =
+        (strcmp(key, "default.audio.sink") == 0) ? EndpointDirection::Output : EndpointDirection::Input;
+    const QString nodeName = parseDefaultNodeName(value);
+
+    QPointer<PipeWireEngine> enginePtr(engine);
+    QMetaObject::invokeMethod(
+        engine,
+        [enginePtr, direction, nodeName]() {
+          if (!enginePtr || enginePtr->isShuttingDown()) {
+            return;
+          }
+          enginePtr->applyDefaultNodeNameUpdate(direction, nodeName);
+        },
+        Qt::QueuedConnection);
+    return 0;
+  }
+
   if (strcmp(key, "node.disabled") != 0)
     return 0;
 
@@ -527,6 +576,13 @@ void PipeWireEngine::addOrUpdateNode(uint32_t id,
   m_nodeIdByDevice.insert(dev, id);
   m_deviceByWpId.insert(id, dev);
 
+  if (type == Sink && qname == m_defaultOutputNodeName) {
+    setObservedDefaultEndpoint(EndpointDirection::Output, dev);
+  }
+  else if (type == Source && qname == m_defaultInputNodeName) {
+    setObservedDefaultEndpoint(EndpointDirection::Input, dev);
+  }
+
   bindNode(id);
 
   // Add or remove from m_sinks based on type
@@ -581,6 +637,13 @@ void PipeWireEngine::removeNode(uint32_t id) {
     return;
 
   m_nodeIdByDevice.remove(dev);
+
+  if (dev->type() == Sink && dev->name() == m_defaultOutputNodeName) {
+    setObservedDefaultEndpointStableId(EndpointDirection::Output, QString());
+  }
+  else if (dev->type() == Source && dev->name() == m_defaultInputNodeName) {
+    setObservedDefaultEndpointStableId(EndpointDirection::Input, QString());
+  }
 
   // Remove from m_sinks if it's a sink
   if (dev->type() == Sink) {
@@ -837,6 +900,35 @@ void PipeWireEngine::applyNodeDisabledUpdate(uint32_t nodeId, bool disabled) {
   if (dev) {
     setNodeEnabledState(dev, !disabled);
   }
+}
+
+void PipeWireEngine::applyDefaultNodeNameUpdate(AudioEngine::EndpointDirection direction, const QString& nodeName) {
+  const QString normalizedNodeName = nodeName.trimmed();
+  if (direction == EndpointDirection::Output) {
+    m_defaultOutputNodeName = normalizedNodeName;
+  }
+  else {
+    m_defaultInputNodeName = normalizedNodeName;
+  }
+
+  AudioDevice* matchedDevice = nullptr;
+  for (AudioDevice* device : std::as_const(m_deviceByWpId)) {
+    if (!device || device->name() != normalizedNodeName) {
+      continue;
+    }
+
+    if (direction == EndpointDirection::Output && device->type() != Sink) {
+      continue;
+    }
+    if (direction == EndpointDirection::Input && device->type() != Source) {
+      continue;
+    }
+
+    matchedDevice = device;
+    break;
+  }
+
+  setObservedDefaultEndpoint(direction, matchedDevice);
 }
 
 void PipeWireEngine::queryNodeVolume(uint32_t nodeId) {

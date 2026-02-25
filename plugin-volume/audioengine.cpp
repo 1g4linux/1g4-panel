@@ -246,6 +246,10 @@ AudioEngine::StateSnapshot AudioEngine::stateSnapshot() const {
     endpoint.volumePercent = std::clamp(device->volume(), 0, 100);
     endpoint.muted = device->mute();
     endpoint.enabled = device->enabled();
+    endpoint.isDefault =
+        (endpoint.direction == EndpointDirection::Output)
+            ? (endpoint.stableId == m_defaultOutputEndpointStableId)
+            : (endpoint.stableId == m_defaultInputEndpointStableId);
     endpoint.lastChangeSource = m_lastChangeSourceByEndpoint.value(endpoint.stableId, ChangeSource::Unknown);
     snapshot.logicalEndpoints.append(std::move(endpoint));
   }
@@ -283,6 +287,7 @@ QList<AudioEngine::SinkSnapshot> AudioEngine::sinkSnapshots() const {
     sink.volumePercent = endpoint.volumePercent;
     sink.muted = endpoint.muted;
     sink.enabled = endpoint.enabled;
+    sink.isDefault = endpoint.isDefault;
     sinks.append(std::move(sink));
   }
 
@@ -483,6 +488,29 @@ void AudioEngine::recordReconnectAttempt(const QString& message) {
   m_backendHealth.state = BackendHealthState::Reconnecting;
   m_backendHealth.message = message;
   queueStateChangedByObjectAndType(QStringLiteral("backend"), CoalescedStateEventType::BackendHealth);
+}
+
+void AudioEngine::setObservedDefaultEndpointStableId(EndpointDirection direction, const QString& endpointStableId) {
+  const QString normalizedId = endpointStableId.trimmed();
+  QString* trackedStableId =
+      (direction == EndpointDirection::Output) ? &m_defaultOutputEndpointStableId : &m_defaultInputEndpointStableId;
+  if (*trackedStableId == normalizedId) {
+    return;
+  }
+
+  *trackedStableId = normalizedId;
+  const QString objectKey =
+      (direction == EndpointDirection::Output) ? QStringLiteral("default-output") : QStringLiteral("default-input");
+  queueStateChangedByObjectAndType(objectKey, CoalescedStateEventType::EndpointState);
+}
+
+void AudioEngine::setObservedDefaultEndpoint(EndpointDirection direction, const AudioDevice* device) {
+  if (!device) {
+    setObservedDefaultEndpointStableId(direction, QString());
+    return;
+  }
+
+  setObservedDefaultEndpointStableId(direction, makeEndpointStableId(*device));
 }
 
 void AudioEngine::queueStateChangedFromDiscovery() {

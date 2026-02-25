@@ -59,6 +59,7 @@ class AudioEngine : public QObject {
     int volumePercent;
     bool muted;
     bool enabled;
+    bool isDefault;
     ChangeSource lastChangeSource;
   };
 
@@ -110,6 +111,7 @@ class AudioEngine : public QObject {
     int volumePercent;
     bool muted;
     bool enabled;
+    bool isDefault;
   };
 
   AudioEngine(QObject* parent = nullptr);
@@ -157,6 +159,8 @@ class AudioEngine : public QObject {
   void clearTrackingForDevice(const AudioDevice* device);
   void setBackendHealth(BackendHealthState state, const QString& message = {});
   void recordReconnectAttempt(const QString& message = {});
+  void setObservedDefaultEndpointStableId(EndpointDirection direction, const QString& endpointStableId);
+  void setObservedDefaultEndpoint(EndpointDirection direction, const AudioDevice* device);
 
   QList<AudioDevice*> m_sinks;
   bool m_ignoreMaxVolume;
@@ -176,6 +180,8 @@ class AudioEngine : public QObject {
   QTimer m_discoveryStateCoalesceTimer;
   QSet<QString> m_pendingCoalescedStateEvents;
   CoalescerMetricsSnapshot m_coalescerMetrics;
+  QString m_defaultOutputEndpointStableId;
+  QString m_defaultInputEndpointStableId;
 };
 
 #endif  // AUDIOENGINE_H

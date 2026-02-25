@@ -82,6 +82,8 @@ class PipeWireEngine : public AudioEngine {
   QMap<uint32_t, void*> m_nodeListenerDataByNodeId;
   QSet<uint32_t> m_disabledNodeIds;
   uint32_t m_metadataId;
+  QString m_defaultOutputNodeName;
+  QString m_defaultInputNodeName;
 
   void connectContext();
   void disconnectContext();
@@ -99,6 +101,7 @@ class PipeWireEngine : public AudioEngine {
   void unbindMetadata(uint32_t id);
   void applyNodeParamUpdate(uint32_t nodeId, bool hasVolume, float volume, bool hasMute, bool mute);
   void applyNodeDisabledUpdate(uint32_t nodeId, bool disabled);
+  void applyDefaultNodeNameUpdate(AudioEngine::EndpointDirection direction, const QString& nodeName);
 
   void queryNodeVolume(uint32_t nodeId);
   bool setNodeVolume(uint32_t nodeId, float volume);

@@ -125,6 +125,14 @@ class SnapshotDummyEngine : public AudioEngine {
     recordReconnectAttempt(message);
   }
 
+  void setObservedDefaultOutputForTest(const QString& endpointStableId) {
+    setObservedDefaultEndpointStableId(EndpointDirection::Output, endpointStableId);
+  }
+
+  void setObservedDefaultInputForTest(const QString& endpointStableId) {
+    setObservedDefaultEndpointStableId(EndpointDirection::Input, endpointStableId);
+  }
+
  private:
   BackendCapabilities m_capabilities;
   bool m_commitVolumeSucceeds;
@@ -140,6 +148,7 @@ class AudioEngineSnapshotTest : public QObject {
   void snapshotIsDetachedFromMutableDeviceState();
   void stableIdDoesNotDependOnRuntimeId();
   void stateSnapshotSeparatesPhysicalDevicesLogicalEndpointsAndStreams();
+  void stateSnapshotMarksObservedDefaultEndpoints();
   void stateSnapshotIncludesBackendCapabilitiesFlags();
   void userVolumeChangeCreatesPendingOperationUntilBackendAcknowledges();
   void failedUserVolumeChangeRollsBackToPreviousValue();
@@ -234,6 +243,58 @@ void AudioEngineSnapshotTest::stateSnapshotSeparatesPhysicalDevicesLogicalEndpoi
   }
   QCOMPARE(outputCount, 2);
   QCOMPARE(inputCount, 1);
+}
+
+void AudioEngineSnapshotTest::stateSnapshotMarksObservedDefaultEndpoints() {
+  SnapshotDummyEngine engine;
+  AudioDevice* sink = engine.addSink(QStringLiteral("alsa_output.default"), QStringLiteral("Default Output"), 13U, 35,
+                                     false, 9);
+  AudioDevice* source =
+      engine.addSource(QStringLiteral("alsa_input.default"), QStringLiteral("Default Input"), 14U, 40, false, 9);
+  QVERIFY(sink != nullptr);
+  QVERIFY(source != nullptr);
+
+  AudioEngine::StateSnapshot state = engine.stateSnapshot();
+  QCOMPARE(state.logicalEndpoints.size(), 2);
+
+  QString sinkStableId;
+  QString sourceStableId;
+  for (const AudioEngine::LogicalEndpointSnapshot& endpoint : std::as_const(state.logicalEndpoints)) {
+    if (endpoint.runtimeId == sink->index()) {
+      sinkStableId = endpoint.stableId;
+    }
+    else if (endpoint.runtimeId == source->index()) {
+      sourceStableId = endpoint.stableId;
+    }
+  }
+
+  QVERIFY(!sinkStableId.isEmpty());
+  QVERIFY(!sourceStableId.isEmpty());
+
+  engine.setObservedDefaultOutputForTest(sinkStableId);
+  engine.setObservedDefaultInputForTest(sourceStableId);
+
+  state = engine.stateSnapshot();
+  QCOMPARE(state.logicalEndpoints.size(), 2);
+
+  bool outputIsDefault = false;
+  bool inputIsDefault = false;
+  for (const AudioEngine::LogicalEndpointSnapshot& endpoint : std::as_const(state.logicalEndpoints)) {
+    if (endpoint.direction == AudioEngine::EndpointDirection::Output) {
+      outputIsDefault = endpoint.isDefault;
+    }
+    else if (endpoint.direction == AudioEngine::EndpointDirection::Input) {
+      inputIsDefault = endpoint.isDefault;
+    }
+  }
+
+  QVERIFY(outputIsDefault);
+  QVERIFY(inputIsDefault);
+
+  const QList<AudioEngine::SinkSnapshot> sinks = engine.sinkSnapshots();
+  QCOMPARE(sinks.size(), 1);
+  QCOMPARE(sinks.first().stableId, sinkStableId);
+  QCOMPARE(sinks.first().isDefault, true);
 }
 
 void AudioEngineSnapshotTest::stateSnapshotIncludesBackendCapabilitiesFlags() {
