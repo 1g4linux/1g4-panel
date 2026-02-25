@@ -3,6 +3,7 @@
 #include "volumepopup.h"
 
 #include <QMetaObject>
+#include <QPushButton>
 #include <QSlider>
 #include <QThread>
 #include <QtTest/QtTest>
@@ -50,6 +51,8 @@ class VolumePopupDragTest : public QObject {
   Q_OBJECT
 
  private slots:
+  void userVolumeSliderChangeUpdatesOutputDeviceVolume();
+  void userMuteToggleUpdatesOutputDeviceMuteState();
   void backendVolumeUpdatesDoNotMoveSliderWhileDragging();
   void staleDeferredBackendVolumeIsDiscardedAfterFurtherDrag();
   void backendUnavailableShowsErrorIconAndDisablesControls();
@@ -57,6 +60,53 @@ class VolumePopupDragTest : public QObject {
   void backendRecoveryRestoresInteractiveVolumeState();
   void offUiThreadVolumeUpdateIsRescheduledToUiThread();
 };
+
+void VolumePopupDragTest::userVolumeSliderChangeUpdatesOutputDeviceVolume() {
+  VolumePopupDummyEngine engine;
+  AudioDevice* sink = engine.addSink(QStringLiteral("alsa_output.popup-user-volume"), 25);
+  QVERIFY(sink != nullptr);
+
+  VolumePopup popup;
+  popup.setDevice(sink);
+
+  QSlider* slider = popup.volumeSlider();
+  QVERIFY(slider != nullptr);
+  QCOMPARE(slider->value(), 25);
+
+  slider->setValue(72);
+
+  QCOMPARE(sink->volume(), 72);
+  QCOMPARE(slider->toolTip(), QStringLiteral("72%"));
+}
+
+void VolumePopupDragTest::userMuteToggleUpdatesOutputDeviceMuteState() {
+  VolumePopupDummyEngine engine;
+  AudioDevice* sink = engine.addSink(QStringLiteral("alsa_output.popup-user-mute"), 40);
+  QVERIFY(sink != nullptr);
+
+  VolumePopup popup;
+  popup.setDevice(sink);
+
+  QPushButton* muteButton = nullptr;
+  for (QPushButton* candidate : popup.findChildren<QPushButton*>()) {
+    if (candidate && candidate->isCheckable()) {
+      muteButton = candidate;
+      break;
+    }
+  }
+
+  QVERIFY(muteButton != nullptr);
+  QCOMPARE(muteButton->isChecked(), false);
+  QCOMPARE(sink->mute(), false);
+
+  QTest::mouseClick(muteButton, Qt::LeftButton);
+  QCOMPARE(muteButton->isChecked(), true);
+  QCOMPARE(sink->mute(), true);
+
+  QTest::mouseClick(muteButton, Qt::LeftButton);
+  QCOMPARE(muteButton->isChecked(), false);
+  QCOMPARE(sink->mute(), false);
+}
 
 void VolumePopupDragTest::backendVolumeUpdatesDoNotMoveSliderWhileDragging() {
   VolumePopupDummyEngine engine;
