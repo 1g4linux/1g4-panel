@@ -7,9 +7,10 @@
 #include <QPointF>
 #include <QPushButton>
 #include <QSlider>
-#include <QThread>
 #include <QWheelEvent>
 #include <QtTest/QtTest>
+
+#include <thread>
 
 class VolumePopupDummyEngine : public AudioEngine {
   Q_OBJECT
@@ -366,22 +367,6 @@ void VolumePopupDragTest::wheelEventClampsInvalidConfiguredStepToKeepScrollActiv
   QCOMPARE(sink->volume(), 31);
 }
 
-class WorkerVolumeUpdateInvoker : public QObject {
-  Q_OBJECT
-
- public:
-  WorkerVolumeUpdateInvoker(VolumePopup* popup, int volume) : m_popup(popup), m_volume(volume) {}
-
- public slots:
-  void invokeDirectUpdate() {
-    QMetaObject::invokeMethod(m_popup, "handleDeviceVolumeChanged", Qt::DirectConnection, Q_ARG(int, m_volume));
-  }
-
- private:
-  VolumePopup* m_popup;
-  int m_volume;
-};
-
 void VolumePopupDragTest::offUiThreadVolumeUpdateIsRescheduledToUiThread() {
   VolumePopupDummyEngine engine;
   AudioDevice* sink = engine.addSink(QStringLiteral("alsa_output.popup-thread"), 20);
@@ -393,19 +378,17 @@ void VolumePopupDragTest::offUiThreadVolumeUpdateIsRescheduledToUiThread() {
   QVERIFY(slider != nullptr);
   QCOMPARE(slider->value(), 20);
 
-  QThread workerThread;
-  WorkerVolumeUpdateInvoker invoker(&popup, 65);
-  invoker.moveToThread(&workerThread);
-  workerThread.start();
-
-  QVERIFY(QMetaObject::invokeMethod(&invoker, "invokeDirectUpdate", Qt::BlockingQueuedConnection));
+  bool invokeSucceeded = false;
+  std::thread worker([&popup, &invokeSucceeded]() {
+    invokeSucceeded =
+        QMetaObject::invokeMethod(&popup, "handleDeviceVolumeChanged", Qt::DirectConnection, Q_ARG(int, 65));
+  });
+  worker.join();
+  QVERIFY(invokeSucceeded);
 
   // The worker-thread call should be marshaled back to popup's thread.
   QCOMPARE(slider->value(), 20);
   QTRY_COMPARE_WITH_TIMEOUT(slider->value(), 65, 200);
-
-  workerThread.quit();
-  QVERIFY(workerThread.wait(1000));
 }
 
 QTEST_MAIN(VolumePopupDragTest)

@@ -6,6 +6,7 @@
 #include <OneG4/Settings.h>
 
 #include <QComboBox>
+#include <QShowEvent>
 #include <QTemporaryDir>
 #include <QtTest/QtTest>
 
@@ -55,6 +56,16 @@ class VolumeConfigurationLazyRebuildTest : public QObject {
   void sinkMenuRebuildIsDeferredUntilDialogIsVisible();
 };
 
+class TestableVolumeConfigurationDialog : public OneG4VolumeConfiguration {
+ public:
+  using OneG4VolumeConfiguration::OneG4VolumeConfiguration;
+
+  void triggerShowEventForTest() {
+    QShowEvent event;
+    OneG4VolumeConfiguration::showEvent(&event);
+  }
+};
+
 void VolumeConfigurationLazyRebuildTest::sinkMenuRebuildIsDeferredUntilDialogIsVisible() {
   QTemporaryDir tempDir;
   QVERIFY(tempDir.isValid());
@@ -73,7 +84,7 @@ void VolumeConfigurationLazyRebuildTest::sinkMenuRebuildIsDeferredUntilDialogIsV
   QVERIFY(sinkA != nullptr);
   QVERIFY(sinkB != nullptr);
 
-  OneG4VolumeConfiguration dialog(pluginSettings.get(), false);
+  TestableVolumeConfigurationDialog dialog(pluginSettings.get(), false);
   QComboBox* combo = dialog.findChild<QComboBox*>(QStringLiteral("devAddedCombo"));
   QVERIFY(combo != nullptr);
   QCOMPARE(combo->count(), 0);
@@ -84,21 +95,17 @@ void VolumeConfigurationLazyRebuildTest::sinkMenuRebuildIsDeferredUntilDialogIsV
   QCOMPARE(dialog.isVisible(), false);
   QCOMPARE(combo->count(), 0);
 
-  dialog.show();
-  QTest::qWait(0);
+  dialog.triggerShowEventForTest();
   QCOMPARE(combo->count(), 2);
 
   AudioDevice* sinkC =
       engine.addSink(QStringLiteral("alsa_output.cardC"), QStringLiteral("USB Audio"), static_cast<uint>(30));
   QVERIFY(sinkC != nullptr);
 
-  dialog.hide();
-  QTest::qWait(0);
   dialog.setSinkList({sinkA, sinkB, sinkC});
   QCOMPARE(combo->count(), 2);
 
-  dialog.show();
-  QTest::qWait(0);
+  dialog.triggerShowEventForTest();
   QCOMPARE(combo->count(), 3);
 }
 

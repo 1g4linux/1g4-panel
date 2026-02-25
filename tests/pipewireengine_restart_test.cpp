@@ -16,7 +16,7 @@ class PipeWireEngineRestartTest : public QObject {
 };
 
 void PipeWireEngineRestartTest::disconnectContextPurgesFakeRuntimeNodes() {
-  PipeWireEngine engine;
+  PipeWireEngine engine(PipeWireEngine::RuntimeMode::DisabledForTests);
   engine.m_reconnectionTimer.stop();
 
   QSignalSpy sinkListChangedSpy(&engine, &AudioEngine::sinkListChanged);
@@ -54,7 +54,7 @@ void PipeWireEngineRestartTest::disconnectContextPurgesFakeRuntimeNodes() {
 }
 
 void PipeWireEngineRestartTest::metadataDefaultNodeUpdatesAffectStateSnapshot() {
-  PipeWireEngine engine;
+  PipeWireEngine engine(PipeWireEngine::RuntimeMode::DisabledForTests);
   engine.m_reconnectionTimer.stop();
 
   constexpr uint32_t kFakeSinkId = 4'000'000'003U;

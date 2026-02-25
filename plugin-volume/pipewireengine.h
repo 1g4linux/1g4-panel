@@ -27,7 +27,13 @@ class PipeWireEngine : public AudioEngine {
   Q_OBJECT
 
  public:
+  enum class RuntimeMode {
+    Live,
+    DisabledForTests,
+  };
+
   explicit PipeWireEngine(QObject* parent = nullptr);
+  explicit PipeWireEngine(RuntimeMode mode, QObject* parent = nullptr);
   ~PipeWireEngine() override;
 
   virtual const QString backendName() const override { return QLatin1String("PipeWire"); }
@@ -71,6 +77,7 @@ class PipeWireEngine : public AudioEngine {
   bool m_ready;
   bool m_connecting;
   std::atomic_bool m_isShuttingDown;
+  bool m_pipeWireInitialized;
   int m_maximumVolume;
 
   QTimer m_reconnectionTimer;
