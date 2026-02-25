@@ -29,6 +29,7 @@ class VolumePopup : public QDialog {
  signals:
   void mouseEntered();
   void mouseLeft();
+  void externalMixerRequested();
 
   // void volumeChanged(int value);
   void deviceChanged();
@@ -44,6 +45,7 @@ class VolumePopup : public QDialog {
  private slots:
   void handleSliderValueChanged(int value);
   void handleMuteToggleClicked();
+  void handleExternalMixerClicked();
   void handleDeviceVolumeChanged(int volume);
   void handleDeviceMuteChanged(bool mute);
 
@@ -53,6 +55,7 @@ class VolumePopup : public QDialog {
 
   QSlider* m_volumeSlider;
   QPushButton* m_muteToggleButton;
+  QPushButton* m_externalMixerButton;
   QPoint m_pos;
   Qt::Corner m_anchor;
   QPointer<AudioDevice> m_device;

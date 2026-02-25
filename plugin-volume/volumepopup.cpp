@@ -40,15 +40,20 @@ VolumePopup::VolumePopup(QWidget* parent)
   m_muteToggleButton->setCheckable(true);
   m_muteToggleButton->setAutoDefault(false);
 
+  m_externalMixerButton = new QPushButton(tr("Mixer"), this);
+  m_externalMixerButton->setAutoDefault(false);
+
   auto* layout = new QVBoxLayout(this);
   layout->setSpacing(0);
   layout->setContentsMargins(QMargins());
 
   layout->addWidget(m_volumeSlider, 0, Qt::AlignHCenter);
   layout->addWidget(m_muteToggleButton, 0, Qt::AlignHCenter);
+  layout->addWidget(m_externalMixerButton, 0, Qt::AlignHCenter);
 
   connect(m_volumeSlider, &QSlider::valueChanged, this, &VolumePopup::handleSliderValueChanged);
   connect(m_muteToggleButton, &QPushButton::clicked, this, &VolumePopup::handleMuteToggleClicked);
+  connect(m_externalMixerButton, &QPushButton::clicked, this, &VolumePopup::handleExternalMixerClicked);
 }
 
 bool VolumePopup::event(QEvent* event) {
@@ -92,6 +97,10 @@ void VolumePopup::handleMuteToggleClicked() {
   }
 
   m_device->toggleMute();
+}
+
+void VolumePopup::handleExternalMixerClicked() {
+  emit externalMixerRequested();
 }
 
 void VolumePopup::handleDeviceVolumeChanged(int volume) {

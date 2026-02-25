@@ -145,6 +145,15 @@ add_test(
 )
 
 add_test(
+    NAME plugin_volume_external_mixer_action_guard
+    COMMAND ${CMAKE_COMMAND}
+            -DONEG4_VOLUME_SOURCE=${CMAKE_SOURCE_DIR}/plugin-volume/oneg4volume.cpp
+            -DVOLUME_POPUP_HEADER=${CMAKE_SOURCE_DIR}/plugin-volume/volumepopup.h
+            -DVOLUME_POPUP_SOURCE=${CMAKE_SOURCE_DIR}/plugin-volume/volumepopup.cpp
+            -P ${CMAKE_CURRENT_SOURCE_DIR}/check_volume_external_mixer_action_guard.cmake
+)
+
+add_test(
     NAME plugin_volume_pipewire_only_backend_guard
     COMMAND ${CMAKE_COMMAND}
             -DVOLUME_PLUGIN_CMAKE=${CMAKE_SOURCE_DIR}/plugin-volume/CMakeLists.txt

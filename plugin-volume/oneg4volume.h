@@ -36,6 +36,7 @@ class OneG4Volume : public QObject, public IOneG4PanelPlugin {
   virtual void settingsChanged();
   void handleSinkListChanged();
   void showNotification() const;
+  void openExternalMixer();
 
  private:
   AudioEngine* m_engine;

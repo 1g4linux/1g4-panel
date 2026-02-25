@@ -21,9 +21,35 @@
 #include <OneG4/Notification.h>
 #include <QDialog>
 #include <QLoggingCategory>
+#include <QProcess>
+#include <QStringList>
+#include <QStandardPaths>
 #include <QtGlobal>
 
 #include <algorithm>
+
+namespace {
+
+QString resolveExternalMixerExecutable() {
+  static const QStringList kCandidates{
+      QStringLiteral("pavucontrol-qt"),
+      QStringLiteral("helvum"),
+      QStringLiteral("qpwgraph"),
+      QStringLiteral("pwvucontrol"),
+      QStringLiteral("pavucontrol"),
+  };
+
+  for (const QString& candidate : kCandidates) {
+    const QString executable = QStandardPaths::findExecutable(candidate);
+    if (!executable.isEmpty()) {
+      return executable;
+    }
+  }
+
+  return {};
+}
+
+}  // namespace
 
 OneG4Volume::OneG4Volume(const IOneG4PanelPluginStartupInfo& startupInfo)
     : QObject(),
@@ -36,6 +62,7 @@ OneG4Volume::OneG4Volume(const IOneG4PanelPluginStartupInfo& startupInfo)
   m_volumeButton = new VolumeButton(this);
 
   m_notification = new OneG4::Notification(QString(), this);
+  connect(m_volumeButton->volumePopup(), &VolumePopup::externalMixerRequested, this, &OneG4Volume::openExternalMixer);
 
 #ifdef ONEG4_VOLUME_DEV_VERBOSE_LOGGING
   QLoggingCategory::setFilterRules(QStringLiteral(
@@ -240,6 +267,24 @@ QDialog* OneG4Volume::configureDialog() {
   }
 
   return m_configDialog;
+}
+
+void OneG4Volume::openExternalMixer() {
+  if (m_volumeButton) {
+    m_volumeButton->hideVolumeSlider();
+  }
+
+  const QString executable = resolveExternalMixerExecutable();
+  if (executable.isEmpty()) {
+    m_notification->setSummary(tr("No external mixer executable found"));
+    m_notification->update();
+    return;
+  }
+
+  if (!QProcess::startDetached(executable, {})) {
+    m_notification->setSummary(tr("Failed to launch external mixer"));
+    m_notification->update();
+  }
 }
 
 void OneG4Volume::showNotification() const {
