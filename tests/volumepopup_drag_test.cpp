@@ -3,9 +3,12 @@
 #include "volumepopup.h"
 
 #include <QMetaObject>
+#include <QPoint>
+#include <QPointF>
 #include <QPushButton>
 #include <QSlider>
 #include <QThread>
+#include <QWheelEvent>
 #include <QtTest/QtTest>
 
 class VolumePopupDummyEngine : public AudioEngine {
@@ -70,8 +73,17 @@ class VolumePopupDragTest : public QObject {
   void backendUnavailableShowsErrorIconAndDisablesControls();
   void noDeviceStateSurfacesExplicitStatus();
   void backendRecoveryRestoresInteractiveVolumeState();
+  void wheelEventUsesConfiguredStepForOutputVolume();
+  void wheelEventClampsInvalidConfiguredStepToKeepScrollActive();
   void offUiThreadVolumeUpdateIsRescheduledToUiThread();
 };
+
+namespace {
+QWheelEvent makeWheelEvent(int angleDeltaY) {
+  return QWheelEvent(QPointF(0.0, 0.0), QPointF(0.0, 0.0), QPoint(0, 0), QPoint(0, angleDeltaY), Qt::NoButton,
+                     Qt::NoModifier, Qt::NoScrollPhase, false);
+}
+}  // namespace
 
 void VolumePopupDragTest::userVolumeSliderChangeUpdatesOutputDeviceVolume() {
   VolumePopupDummyEngine engine;
@@ -308,6 +320,50 @@ void VolumePopupDragTest::backendRecoveryRestoresInteractiveVolumeState() {
   QCOMPARE(slider->toolTip(), QStringLiteral("Output: alsa_output.popup-recovery (active), 20%"));
   QVERIFY(!stockIconSpy.isEmpty());
   QCOMPARE(stockIconSpy.last().at(0).toString(), QStringLiteral("audio-volume-low-panel"));
+}
+
+void VolumePopupDragTest::wheelEventUsesConfiguredStepForOutputVolume() {
+  VolumePopupDummyEngine engine;
+  AudioDevice* sink = engine.addSink(QStringLiteral("alsa_output.popup-wheel-configured-step"), 20);
+  QVERIFY(sink != nullptr);
+
+  VolumePopup popup;
+  popup.setDevice(sink);
+  popup.setSliderStep(7);
+
+  QSlider* slider = popup.volumeSlider();
+  QVERIFY(slider != nullptr);
+  QCOMPARE(slider->value(), 20);
+
+  QWheelEvent up = makeWheelEvent(QWheelEvent::DefaultDeltasPerStep);
+  popup.handleWheelEvent(&up);
+  QCOMPARE(slider->value(), 27);
+  QCOMPARE(sink->volume(), 27);
+
+  QWheelEvent downTwoSteps = makeWheelEvent(-2 * QWheelEvent::DefaultDeltasPerStep);
+  popup.handleWheelEvent(&downTwoSteps);
+  QCOMPARE(slider->value(), 13);
+  QCOMPARE(sink->volume(), 13);
+}
+
+void VolumePopupDragTest::wheelEventClampsInvalidConfiguredStepToKeepScrollActive() {
+  VolumePopupDummyEngine engine;
+  AudioDevice* sink = engine.addSink(QStringLiteral("alsa_output.popup-wheel-invalid-step"), 30);
+  QVERIFY(sink != nullptr);
+
+  VolumePopup popup;
+  popup.setDevice(sink);
+  popup.setSliderStep(0);
+
+  QSlider* slider = popup.volumeSlider();
+  QVERIFY(slider != nullptr);
+  QCOMPARE(slider->value(), 30);
+
+  QWheelEvent up = makeWheelEvent(QWheelEvent::DefaultDeltasPerStep);
+  popup.handleWheelEvent(&up);
+
+  QCOMPARE(slider->value(), 31);
+  QCOMPARE(sink->volume(), 31);
 }
 
 class WorkerVolumeUpdateInvoker : public QObject {

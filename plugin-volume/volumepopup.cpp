@@ -486,10 +486,12 @@ void VolumePopup::setBackendAvailable(bool available, const QString& statusMessa
 }
 
 void VolumePopup::setSliderStep(int step) {
-  m_volumeSlider->setSingleStep(step);
-  m_volumeSlider->setPageStep(step * 10);
-  m_inputVolumeSlider->setSingleStep(step);
-  m_inputVolumeSlider->setPageStep(step * 10);
+  // Keep wheel and keyboard stepping valid even if persisted settings are malformed.
+  const int normalizedStep = qBound(1, step, 100);
+  m_volumeSlider->setSingleStep(normalizedStep);
+  m_volumeSlider->setPageStep(normalizedStep * 10);
+  m_inputVolumeSlider->setSingleStep(normalizedStep);
+  m_inputVolumeSlider->setPageStep(normalizedStep * 10);
 }
 
 void VolumePopup::applyVolumeToSlider(int volume) {
