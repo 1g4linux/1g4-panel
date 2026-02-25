@@ -40,6 +40,14 @@ add_test(
 )
 
 add_test(
+    NAME plugin_volume_pulseaudio_shutdown_guard
+    COMMAND ${CMAKE_COMMAND}
+            -DPULSEAUDIO_ENGINE_SOURCE=${CMAKE_SOURCE_DIR}/plugin-volume/pulseaudioengine.cpp
+            -DPULSEAUDIO_ENGINE_HEADER=${CMAKE_SOURCE_DIR}/plugin-volume/pulseaudioengine.h
+            -P ${CMAKE_CURRENT_SOURCE_DIR}/check_pulseaudio_shutdown_guard.cmake
+)
+
+add_test(
     NAME plugin_volume_keyboard_notification_setting_removed_guard
     COMMAND ${CMAKE_COMMAND}
             -DONEG4_VOLUME_SOURCE=${CMAKE_SOURCE_DIR}/plugin-volume/oneg4volume.cpp

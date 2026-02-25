@@ -20,16 +20,24 @@
 
 static void sinkInfoCallback(pa_context* context, const pa_sink_info* info, int isLast, void* userdata) {
   auto* pulseEngine = static_cast<PulseAudioEngine*>(userdata);
+  if (!pulseEngine || pulseEngine->isShuttingDown()) {
+    return;
+  }
+
+  pa_threaded_mainloop* loop = pulseEngine->mainloop();
+  if (!loop) {
+    return;
+  }
 
   if (isLast < 0) {
-    pa_threaded_mainloop_signal(pulseEngine->mainloop(), 0);
+    pa_threaded_mainloop_signal(loop, 0);
     qCWarning(lcVolumeBackend) << QStringLiteral("Failed to get sink information: %1")
                                       .arg(QString::fromUtf8(pa_strerror(pa_context_errno(context))));
     return;
   }
 
   if (isLast) {
-    pa_threaded_mainloop_signal(pulseEngine->mainloop(), 0);
+    pa_threaded_mainloop_signal(loop, 0);
     return;
   }
 
@@ -67,6 +75,9 @@ static void contextEventCallback(pa_context* context, const char* name, pa_propl
 
 static void contextStateCallback(pa_context* context, void* userdata) {
   auto* pulseEngine = static_cast<PulseAudioEngine*>(userdata);
+  if (!pulseEngine || pulseEngine->isShuttingDown()) {
+    return;
+  }
 
   // update internal state
   const pa_context_state_t state = pa_context_get_state(context);
@@ -100,7 +111,9 @@ static void contextStateCallback(pa_context* context, void* userdata) {
   }
 #endif
 
-  pa_threaded_mainloop_signal(pulseEngine->mainloop(), 0);
+  if (pa_threaded_mainloop* loop = pulseEngine->mainloop()) {
+    pa_threaded_mainloop_signal(loop, 0);
+  }
 }
 
 static void contextSuccessCallback(pa_context* context, int success, void* userdata) {
@@ -108,7 +121,13 @@ static void contextSuccessCallback(pa_context* context, int success, void* userd
   Q_UNUSED(success);
 
   auto* pulseEngine = static_cast<PulseAudioEngine*>(userdata);
-  pa_threaded_mainloop_signal(pulseEngine->mainloop(), 0);
+  if (!pulseEngine || pulseEngine->isShuttingDown()) {
+    return;
+  }
+
+  if (pa_threaded_mainloop* loop = pulseEngine->mainloop()) {
+    pa_threaded_mainloop_signal(loop, 0);
+  }
 }
 
 static void contextSubscriptionCallback(pa_context* context,
@@ -118,6 +137,10 @@ static void contextSubscriptionCallback(pa_context* context,
   Q_UNUSED(context);
 
   auto* pulseEngine = static_cast<PulseAudioEngine*>(userdata);
+  if (!pulseEngine || pulseEngine->isShuttingDown()) {
+    return;
+  }
+
   const auto eventType = static_cast<pa_subscription_event_type_t>(t & PA_SUBSCRIPTION_EVENT_TYPE_MASK);
   if (eventType == PA_SUBSCRIPTION_EVENT_REMOVE) {
     QPointer<PulseAudioEngine> enginePtr(pulseEngine);
@@ -138,10 +161,13 @@ static void contextSubscriptionCallback(pa_context* context,
 
 PulseAudioEngine::PulseAudioEngine(QObject* parent)
     : AudioEngine(parent),
+      m_mainLoopApi(nullptr),
+      m_mainLoop(nullptr),
       m_context(nullptr),
       m_contextState(PA_CONTEXT_UNCONNECTED),
       m_ready(false),
-      m_maximumVolume(PA_VOLUME_NORM) {
+      m_maximumVolume(PA_VOLUME_NORM),
+      m_shuttingDown(false) {
   qRegisterMetaType<pa_context_state_t>("pa_context_state_t");
 
   m_reconnectionTimer.setSingleShot(true);
@@ -169,16 +195,43 @@ PulseAudioEngine::PulseAudioEngine(QObject* parent)
 }
 
 PulseAudioEngine::~PulseAudioEngine() {
-  if (m_context) {
-    pa_context_unref(m_context);
-    m_context = nullptr;
-  }
+  m_shuttingDown.store(true, std::memory_order_release);
+  shutdownContext();
 
   if (m_mainLoop) {
     pa_threaded_mainloop_stop(m_mainLoop);
     pa_threaded_mainloop_free(m_mainLoop);
     m_mainLoop = nullptr;
   }
+
+  m_mainLoopApi = nullptr;
+}
+
+void PulseAudioEngine::shutdownContext() {
+  m_reconnectionTimer.stop();
+
+  if (!m_mainLoop) {
+    m_context = nullptr;
+    m_ready = false;
+    m_contextState = PA_CONTEXT_TERMINATED;
+    return;
+  }
+
+  pa_threaded_mainloop_lock(m_mainLoop);
+
+  if (m_context) {
+    pa_context_set_state_callback(m_context, nullptr, nullptr);
+    pa_context_set_event_callback(m_context, nullptr, nullptr);
+    pa_context_set_subscribe_callback(m_context, nullptr, nullptr);
+    pa_context_disconnect(m_context);
+    pa_context_unref(m_context);
+    m_context = nullptr;
+  }
+
+  pa_threaded_mainloop_unlock(m_mainLoop);
+
+  m_ready = false;
+  m_contextState = PA_CONTEXT_TERMINATED;
 }
 
 void PulseAudioEngine::removeSink(uint32_t idx) {
@@ -272,11 +325,13 @@ void PulseAudioEngine::addOrUpdateSinkSnapshot(const QString& name,
 }
 
 void PulseAudioEngine::requestSinkInfoUpdate(uint32_t idx) {
+  if (isShuttingDown())
+    return;
   emit sinkInfoChanged(idx);
 }
 
 void PulseAudioEngine::commitDeviceVolume(AudioDevice* device) {
-  if (!device || !m_ready)
+  if (!device || !m_ready || !m_mainLoop || !m_context || isShuttingDown())
     return;
 
   // convert from percentage to real volume value
@@ -303,7 +358,7 @@ void PulseAudioEngine::commitDeviceVolume(AudioDevice* device) {
 }
 
 void PulseAudioEngine::retrieveSinks() {
-  if (!m_ready)
+  if (!m_ready || !m_mainLoop || !m_context || isShuttingDown())
     return;
 
   pa_threaded_mainloop_lock(m_mainLoop);
@@ -319,7 +374,7 @@ void PulseAudioEngine::retrieveSinks() {
 }
 
 void PulseAudioEngine::setupSubscription() {
-  if (!m_ready)
+  if (!m_ready || !m_mainLoop || !m_context || isShuttingDown())
     return;
 
   connect(this, &PulseAudioEngine::sinkInfoChanged, this, &PulseAudioEngine::retrieveSinkInfo,
@@ -339,6 +394,9 @@ void PulseAudioEngine::setupSubscription() {
 }
 
 void PulseAudioEngine::handleContextStateChanged() {
+  if (isShuttingDown())
+    return;
+
   if (m_contextState == PA_CONTEXT_FAILED || m_contextState == PA_CONTEXT_TERMINATED) {
     qCWarning(lcVolumeBackend)
         << "PulseAudioEngine: context failed or terminated, scheduling reconnection";
@@ -347,6 +405,9 @@ void PulseAudioEngine::handleContextStateChanged() {
 }
 
 void PulseAudioEngine::connectContext() {
+  if (isShuttingDown())
+    return;
+
   bool keepGoing = true;
   bool ok = false;
 
@@ -358,6 +419,10 @@ void PulseAudioEngine::connectContext() {
   pa_threaded_mainloop_lock(m_mainLoop);
 
   if (m_context) {
+    pa_context_set_state_callback(m_context, nullptr, nullptr);
+    pa_context_set_event_callback(m_context, nullptr, nullptr);
+    pa_context_set_subscribe_callback(m_context, nullptr, nullptr);
+    pa_context_disconnect(m_context);
     pa_context_unref(m_context);
     m_context = nullptr;
   }
@@ -368,13 +433,21 @@ void PulseAudioEngine::connectContext() {
 
   if (!m_context) {
     pa_threaded_mainloop_unlock(m_mainLoop);
-    m_reconnectionTimer.start();
+    if (!isShuttingDown())
+      m_reconnectionTimer.start();
     return;
   }
 
   if (pa_context_connect(m_context, nullptr, static_cast<pa_context_flags_t>(0), nullptr) < 0) {
+    pa_context_set_state_callback(m_context, nullptr, nullptr);
+    pa_context_set_event_callback(m_context, nullptr, nullptr);
+    pa_context_set_subscribe_callback(m_context, nullptr, nullptr);
+    pa_context_disconnect(m_context);
+    pa_context_unref(m_context);
+    m_context = nullptr;
     pa_threaded_mainloop_unlock(m_mainLoop);
-    m_reconnectionTimer.start();
+    if (!isShuttingDown())
+      m_reconnectionTimer.start();
     return;
   }
 
@@ -413,12 +486,13 @@ void PulseAudioEngine::connectContext() {
     setupSubscription();
   }
   else {
-    m_reconnectionTimer.start();
+    if (!isShuttingDown())
+      m_reconnectionTimer.start();
   }
 }
 
 void PulseAudioEngine::retrieveSinkInfo(uint32_t idx) {
-  if (!m_ready)
+  if (!m_ready || !m_mainLoop || !m_context || isShuttingDown())
     return;
 
   pa_threaded_mainloop_lock(m_mainLoop);
@@ -434,7 +508,7 @@ void PulseAudioEngine::retrieveSinkInfo(uint32_t idx) {
 }
 
 void PulseAudioEngine::setMute(AudioDevice* device, bool state) {
-  if (!m_ready || !device)
+  if (!m_ready || !device || !m_mainLoop || !m_context || isShuttingDown())
     return;
 
   pa_threaded_mainloop_lock(m_mainLoop);
@@ -451,6 +525,9 @@ void PulseAudioEngine::setMute(AudioDevice* device, bool state) {
 }
 
 void PulseAudioEngine::setContextState(pa_context_state_t state) {
+  if (isShuttingDown())
+    return;
+
   if (m_contextState == state)
     return;
 

@@ -12,6 +12,8 @@
 #include <QTimer>
 #include <QMap>
 
+#include <atomic>
+
 #include <pulse/pulseaudio.h>
 
 // PA_VOLUME_UI_MAX is only supported since pulseaudio 0.9.23
@@ -26,11 +28,12 @@ class PulseAudioEngine : public AudioEngine {
 
  public:
   PulseAudioEngine(QObject* parent = nullptr);
-  ~PulseAudioEngine();
+  ~PulseAudioEngine() override;
 
-  virtual const QString backendName() const { return QLatin1String("PulseAudio"); }
+  virtual const QString backendName() const override { return QLatin1String("PulseAudio"); }
 
-  int volumeMax(AudioDevice* /*device*/) const { return m_maximumVolume; }
+  int volumeMax(AudioDevice* /*device*/) const override { return m_maximumVolume; }
+  bool isShuttingDown() const { return m_shuttingDown.load(std::memory_order_acquire); }
 
   void requestSinkInfoUpdate(uint32_t idx);
   void removeSink(uint32_t idx);
@@ -62,6 +65,7 @@ class PulseAudioEngine : public AudioEngine {
   void connectContext();
 
  private:
+  void shutdownContext();
   void retrieveSinks();
   void setupSubscription();
 
@@ -73,6 +77,7 @@ class PulseAudioEngine : public AudioEngine {
   bool m_ready;
   QTimer m_reconnectionTimer;
   int m_maximumVolume;
+  std::atomic_bool m_shuttingDown;
 
   QMap<AudioDevice*, pa_cvolume> m_cVolumeMap;
 };
