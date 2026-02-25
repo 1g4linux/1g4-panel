@@ -83,8 +83,12 @@ AudioEngine::AudioEngine(QObject* parent)
           BackendHealthState::Unknown,
           0U,
           QString(),
-      } {
-  connect(this, &AudioEngine::sinkListChanged, this, &AudioEngine::stateChanged);
+      },
+      m_hasPendingDiscoveryState(false) {
+  m_discoveryStateCoalesceTimer.setSingleShot(true);
+  m_discoveryStateCoalesceTimer.setInterval(kDiscoveryStateCoalesceIntervalMs);
+  connect(this, &AudioEngine::sinkListChanged, this, &AudioEngine::queueStateChangedFromDiscovery);
+  connect(&m_discoveryStateCoalesceTimer, &QTimer::timeout, this, &AudioEngine::flushDeferredStateChanged);
 }
 
 AudioEngine::~AudioEngine() {
@@ -424,5 +428,21 @@ void AudioEngine::recordReconnectAttempt(const QString& message) {
   ++m_backendHealth.reconnectAttempts;
   m_backendHealth.state = BackendHealthState::Reconnecting;
   m_backendHealth.message = message;
+  emit stateChanged();
+}
+
+void AudioEngine::queueStateChangedFromDiscovery() {
+  m_hasPendingDiscoveryState = true;
+  if (!m_discoveryStateCoalesceTimer.isActive()) {
+    m_discoveryStateCoalesceTimer.start();
+  }
+}
+
+void AudioEngine::flushDeferredStateChanged() {
+  if (!m_hasPendingDiscoveryState) {
+    return;
+  }
+
+  m_hasPendingDiscoveryState = false;
   emit stateChanged();
 }

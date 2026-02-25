@@ -152,10 +152,16 @@ class AudioEngine : public QObject {
   bool m_ignoreMaxVolume;
 
  private:
+  static constexpr int kDiscoveryStateCoalesceIntervalMs = 20;
+  void queueStateChangedFromDiscovery();
+  void flushDeferredStateChanged();
+
   quint64 m_nextPendingOperationId;
   QHash<QString, PendingOperationSnapshot> m_pendingOperationsByKey;
   QHash<QString, ChangeSource> m_lastChangeSourceByEndpoint;
   BackendHealthSnapshot m_backendHealth;
+  QTimer m_discoveryStateCoalesceTimer;
+  bool m_hasPendingDiscoveryState;
 };
 
 #endif  // AUDIOENGINE_H

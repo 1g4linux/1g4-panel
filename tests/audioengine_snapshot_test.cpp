@@ -130,6 +130,7 @@ class AudioEngineSnapshotTest : public QObject {
   void backendUpdateMarksEndpointChangeSource();
   void backendControlInterfacesDefaultToUnsupported();
   void stateChangedSignalSubscribesToDiscoveryUpdates();
+  void stateChangedSignalCoalescesDiscoveryBursts();
   void volumeCommitRequestRunsAsynchronously();
   void stateSnapshotTracksBackendHealthAndReconnectAttempts();
   void removingEndpointClearsStalePendingOperations();
@@ -279,7 +280,24 @@ void AudioEngineSnapshotTest::stateChangedSignalSubscribesToDiscoveryUpdates() {
 
   engine.emitSinkListChangedForTest();
 
+  QTRY_COMPARE_WITH_TIMEOUT(stateChangedSpy.count(), 1, 200);
+}
+
+void AudioEngineSnapshotTest::stateChangedSignalCoalescesDiscoveryBursts() {
+  SnapshotDummyEngine engine;
+  QSignalSpy stateChangedSpy(&engine, &AudioEngine::stateChanged);
+
+  engine.emitSinkListChangedForTest();
+  engine.emitSinkListChangedForTest();
+  engine.emitSinkListChangedForTest();
+
+  QTRY_COMPARE_WITH_TIMEOUT(stateChangedSpy.count(), 1, 200);
+  QTest::qWait(50);
   QCOMPARE(stateChangedSpy.count(), 1);
+
+  engine.emitSinkListChangedForTest();
+  engine.emitSinkListChangedForTest();
+  QTRY_COMPARE_WITH_TIMEOUT(stateChangedSpy.count(), 2, 200);
 }
 
 void AudioEngineSnapshotTest::volumeCommitRequestRunsAsynchronously() {
