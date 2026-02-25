@@ -7,6 +7,7 @@
 
 #include <QObject>
 #include <QList>
+#include <QString>
 #include <QTimer>
 
 class AudioDevice;
@@ -15,10 +16,23 @@ class AudioEngine : public QObject {
   Q_OBJECT
 
  public:
+  struct SinkSnapshot {
+    QString stableId;
+    uint runtimeId;
+    QString name;
+    QString description;
+    QString profileName;
+    int cardId;
+    int volumePercent;
+    bool muted;
+    bool enabled;
+  };
+
   AudioEngine(QObject* parent = nullptr);
   ~AudioEngine();
 
   const QList<AudioDevice*>& sinks() const { return m_sinks; }
+  QList<SinkSnapshot> sinkSnapshots() const;
   virtual int volumeMax(AudioDevice* device) const = 0;
   virtual int volumeBounded(int volume, AudioDevice* device) const;
   virtual const QString backendName() const = 0;

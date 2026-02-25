@@ -25,6 +25,19 @@ add_test(
     COMMAND plugin_volume_audioengine_ignoremaxvolume_test
 )
 
+add_executable(plugin_volume_audioengine_snapshot_test
+    audioengine_snapshot_test.cpp
+    ${CMAKE_SOURCE_DIR}/plugin-volume/audioengine.cpp
+    ${CMAKE_SOURCE_DIR}/plugin-volume/audiodevice.cpp
+)
+target_include_directories(plugin_volume_audioengine_snapshot_test PRIVATE ${CMAKE_SOURCE_DIR}/plugin-volume)
+target_link_libraries(plugin_volume_audioengine_snapshot_test PRIVATE Qt6::Core Qt6::Test)
+
+add_test(
+    NAME plugin_volume_audioengine_snapshot_test
+    COMMAND plugin_volume_audioengine_snapshot_test
+)
+
 add_executable(plugin_volume_plugin_load_test
     plugin_volume_plugin_load_test.cpp
     ${CMAKE_SOURCE_DIR}/panel/pluginsettings.cpp
