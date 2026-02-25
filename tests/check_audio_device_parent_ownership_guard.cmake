@@ -1,0 +1,21 @@
+if(NOT DEFINED PIPEWIRE_ENGINE_SOURCE OR NOT EXISTS "${PIPEWIRE_ENGINE_SOURCE}")
+  message(FATAL_ERROR "Missing PIPEWIRE_ENGINE_SOURCE")
+endif()
+
+if(NOT DEFINED PULSEAUDIO_ENGINE_SOURCE OR NOT EXISTS "${PULSEAUDIO_ENGINE_SOURCE}")
+  message(FATAL_ERROR "Missing PULSEAUDIO_ENGINE_SOURCE")
+endif()
+
+file(READ "${PIPEWIRE_ENGINE_SOURCE}" PIPEWIRE_ENGINE_CONTENT)
+file(READ "${PULSEAUDIO_ENGINE_SOURCE}" PULSEAUDIO_ENGINE_CONTENT)
+
+string(FIND "${PIPEWIRE_ENGINE_CONTENT}" "dev = new AudioDevice(type, this, this);" PIPEWIRE_PARENTED_POS)
+if(PIPEWIRE_PARENTED_POS EQUAL -1)
+  message(FATAL_ERROR "PipeWireEngine must parent AudioDevice instances to the engine for QObject ownership safety.")
+endif()
+
+string(REGEX MATCHALL "new AudioDevice\\(Sink, this, this\\);" PULSEAUDIO_PARENTED_ALLOCS "${PULSEAUDIO_ENGINE_CONTENT}")
+list(LENGTH PULSEAUDIO_PARENTED_ALLOCS PULSEAUDIO_PARENTED_ALLOC_COUNT)
+if(PULSEAUDIO_PARENTED_ALLOC_COUNT LESS 2)
+  message(FATAL_ERROR "PulseAudioEngine must parent AudioDevice instances to the engine in all sink creation paths.")
+endif()

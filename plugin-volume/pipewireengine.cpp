@@ -39,6 +39,7 @@ PipeWireEngine::PipeWireEngine(QObject* parent)
       m_metadata(nullptr),
       m_ready(false),
       m_connecting(false),
+      m_isShuttingDown(false),
       m_maximumVolume(150),
       m_metadataId(SPA_ID_INVALID) {
   pw_init(nullptr, nullptr);
@@ -85,6 +86,8 @@ PipeWireEngine::PipeWireEngine(QObject* parent)
 }
 
 PipeWireEngine::~PipeWireEngine() {
+  m_isShuttingDown.store(true, std::memory_order_release);
+
   for (uint32_t nodeId : m_nodeByNodeId.keys()) {
     unbindNode(nodeId);
   }
@@ -157,6 +160,9 @@ bool PipeWireEngine::setDeviceEnabled(AudioDevice* device, bool enabled) {
 
 void PipeWireEngine::connectContext() {
   if (!m_threadLoop || !m_context)
+    return;
+
+  if (isShuttingDown())
     return;
 
   if (m_connecting)
@@ -295,13 +301,16 @@ void PipeWireEngine::onCoreError(void* data, uint32_t id, int seq, int res, cons
   if (!engine) {
     return;
   }
+  if (engine->isShuttingDown()) {
+    return;
+  }
   const QString errorMessage = QString::fromUtf8(message ? message : "unknown");
   qCWarning(lcVolumeBackend) << "PipeWireEngine: core error" << errorMessage;
   QPointer<PipeWireEngine> enginePtr(engine);
   QMetaObject::invokeMethod(
       engine,
       [enginePtr, errorMessage]() {
-        if (!enginePtr) {
+        if (!enginePtr || enginePtr->isShuttingDown()) {
           return;
         }
         enginePtr->setBackendHealth(AudioEngine::BackendHealthState::Reconnecting,
@@ -324,6 +333,8 @@ void PipeWireEngine::onRegistryGlobal(void* data,
   auto* engine = static_cast<PipeWireEngine*>(data);
   if (!engine)
     return;
+  if (engine->isShuttingDown())
+    return;
 
   QPointer<PipeWireEngine> enginePtr(engine);
 
@@ -331,7 +342,7 @@ void PipeWireEngine::onRegistryGlobal(void* data,
     QMetaObject::invokeMethod(
         engine,
         [enginePtr, id]() {
-          if (!enginePtr) {
+          if (!enginePtr || enginePtr->isShuttingDown()) {
             return;
           }
           enginePtr->bindMetadata(id);
@@ -379,7 +390,7 @@ void PipeWireEngine::onRegistryGlobal(void* data,
   QMetaObject::invokeMethod(
       engine,
       [enginePtr, id, qname, qdesc, devType, cardId, profileName]() {
-        if (!enginePtr) {
+        if (!enginePtr || enginePtr->isShuttingDown()) {
           return;
         }
         enginePtr->addOrUpdateNode(id, qname, qdesc, devType, cardId, profileName);
@@ -392,12 +403,14 @@ void PipeWireEngine::onRegistryGlobalRemove(void* data, uint32_t id) {
   auto* engine = static_cast<PipeWireEngine*>(data);
   if (!engine)
     return;
+  if (engine->isShuttingDown())
+    return;
 
   QPointer<PipeWireEngine> enginePtr(engine);
   QMetaObject::invokeMethod(
       engine,
       [enginePtr, id]() {
-        if (!enginePtr) {
+        if (!enginePtr || enginePtr->isShuttingDown()) {
           return;
         }
         if (enginePtr->m_metadataId == id) {
@@ -420,6 +433,8 @@ int PipeWireEngine::onMetadataProperty(void* data,
   auto* engine = static_cast<PipeWireEngine*>(data);
   if (!engine || !key)
     return 0;
+  if (engine->isShuttingDown())
+    return 0;
 
   if (strcmp(key, "node.disabled") != 0)
     return 0;
@@ -429,7 +444,7 @@ int PipeWireEngine::onMetadataProperty(void* data,
   QMetaObject::invokeMethod(
       engine,
       [enginePtr, subject, disabled]() {
-        if (!enginePtr) {
+        if (!enginePtr || enginePtr->isShuttingDown()) {
           return;
         }
         enginePtr->applyNodeDisabledUpdate(subject, disabled);
@@ -457,7 +472,7 @@ void PipeWireEngine::addOrUpdateNode(uint32_t id,
   bool typeChanged = false;
 
   if (!dev) {
-    dev = new AudioDevice(type, this);
+    dev = new AudioDevice(type, this, this);
   }
   else {
     AudioDeviceType oldType = dev->type();
@@ -696,6 +711,9 @@ void PipeWireEngine::onNodeParams(void* data,
 
   PipeWireEngine* engine = ctx->engine;
   uint32_t nodeId = ctx->nodeId;
+  if (engine->isShuttingDown()) {
+    return;
+  }
 
   if (param->type != SPA_TYPE_Object) {
     return;
@@ -743,7 +761,7 @@ void PipeWireEngine::onNodeParams(void* data,
   QMetaObject::invokeMethod(
       engine,
       [enginePtr, nodeId, paramId, hasVolume, volume, hasMute, mute]() {
-        if (!enginePtr) {
+        if (!enginePtr || enginePtr->isShuttingDown()) {
           return;
         }
         enginePtr->applyNodeParamUpdate(nodeId, hasVolume, volume, hasMute, mute);

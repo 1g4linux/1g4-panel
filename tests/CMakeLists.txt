@@ -124,6 +124,14 @@ add_test(
 )
 
 add_test(
+    NAME plugin_volume_pipewire_teardown_queued_signal_guard
+    COMMAND ${CMAKE_COMMAND}
+            -DPIPEWIRE_ENGINE_SOURCE=${CMAKE_SOURCE_DIR}/plugin-volume/pipewireengine.cpp
+            -DPIPEWIRE_ENGINE_HEADER=${CMAKE_SOURCE_DIR}/plugin-volume/pipewireengine.h
+            -P ${CMAKE_CURRENT_SOURCE_DIR}/check_pipewire_teardown_queued_signal_guard.cmake
+)
+
+add_test(
     NAME plugin_volume_dependency_checks_guard
     COMMAND ${CMAKE_COMMAND}
             -DONEG4_PANEL_CMAKE=${CMAKE_SOURCE_DIR}/CMakeLists.txt
@@ -195,6 +203,22 @@ add_test(
             -DVOLUME_POPUP_HEADER=${CMAKE_SOURCE_DIR}/plugin-volume/volumepopup.h
             -DVOLUME_POPUP_SOURCE=${CMAKE_SOURCE_DIR}/plugin-volume/volumepopup.cpp
             -P ${CMAKE_CURRENT_SOURCE_DIR}/check_volume_external_mixer_action_guard.cmake
+)
+
+add_test(
+    NAME plugin_volume_backend_ui_queued_connections_guard
+    COMMAND ${CMAKE_COMMAND}
+            -DONEG4_VOLUME_SOURCE=${CMAKE_SOURCE_DIR}/plugin-volume/oneg4volume.cpp
+            -DVOLUME_POPUP_SOURCE=${CMAKE_SOURCE_DIR}/plugin-volume/volumepopup.cpp
+            -P ${CMAKE_CURRENT_SOURCE_DIR}/check_volume_backend_ui_queued_connections_guard.cmake
+)
+
+add_test(
+    NAME plugin_volume_audio_device_parent_ownership_guard
+    COMMAND ${CMAKE_COMMAND}
+            -DPIPEWIRE_ENGINE_SOURCE=${CMAKE_SOURCE_DIR}/plugin-volume/pipewireengine.cpp
+            -DPULSEAUDIO_ENGINE_SOURCE=${CMAKE_SOURCE_DIR}/plugin-volume/pulseaudioengine.cpp
+            -P ${CMAKE_CURRENT_SOURCE_DIR}/check_audio_device_parent_ownership_guard.cmake
 )
 
 add_test(

@@ -139,6 +139,9 @@ class AudioEngineSnapshotTest : public QObject {
   void rapidMuteBurstFailureRollsBackToPreBurstValue();
   void stateSnapshotTracksBackendHealthAndReconnectAttempts();
   void removingEndpointClearsStalePendingOperations();
+  void panelUnloadQueuedVolumeCommitSafeDuringEngineDestruction();
+  void sessionLogoutQueuedMuteCommitSafeDuringEngineDestruction();
+  void backendCrashQueuedStateFlushSafeDuringEngineDestruction();
 };
 
 void AudioEngineSnapshotTest::snapshotIsDetachedFromMutableDeviceState() {
@@ -458,6 +461,47 @@ void AudioEngineSnapshotTest::removingEndpointClearsStalePendingOperations() {
   const AudioEngine::StateSnapshot state = engine.stateSnapshot();
   QVERIFY(state.pendingOperations.isEmpty());
   QVERIFY(state.logicalEndpoints.isEmpty());
+}
+
+void AudioEngineSnapshotTest::panelUnloadQueuedVolumeCommitSafeDuringEngineDestruction() {
+  auto* engine = new SnapshotDummyEngine;
+  engine->setCommitBehavior(false, true);
+  AudioDevice* sink =
+      engine->addSink(QStringLiteral("alsa_output.panel-unload"), QStringLiteral("Panel Unload Sink"), 8U, 30, false, 1);
+  QVERIFY(sink != nullptr);
+
+  sink->setVolume(75);
+  delete engine;
+
+  // Panel unload destroys backend objects before queued commit callbacks drain.
+  QCoreApplication::processEvents();
+  QVERIFY(true);
+}
+
+void AudioEngineSnapshotTest::sessionLogoutQueuedMuteCommitSafeDuringEngineDestruction() {
+  auto* engine = new SnapshotDummyEngine;
+  engine->setCommitBehavior(true, false);
+  AudioDevice* sink = engine->addSink(QStringLiteral("alsa_output.session-logout"),
+                                      QStringLiteral("Session Logout Sink"), 9U, 30, false, 1);
+  QVERIFY(sink != nullptr);
+
+  sink->setMute(true);
+  delete engine;
+
+  // Session logout tears down plugin/backend while queued mute callbacks may still exist.
+  QCoreApplication::processEvents();
+  QVERIFY(true);
+}
+
+void AudioEngineSnapshotTest::backendCrashQueuedStateFlushSafeDuringEngineDestruction() {
+  auto* engine = new SnapshotDummyEngine;
+  QSignalSpy stateChangedSpy(engine, &AudioEngine::stateChanged);
+
+  engine->setBackendHealthForTest(AudioEngine::BackendHealthState::Reconnecting, QStringLiteral("backend crash"));
+  delete engine;
+
+  QTest::qWait(50);
+  QCOMPARE(stateChangedSpy.count(), 0);
 }
 
 QTEST_MAIN(AudioEngineSnapshotTest)

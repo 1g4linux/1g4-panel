@@ -21,7 +21,10 @@
 #include <OneG4/Notification.h>
 #include <QDialog>
 #include <QLoggingCategory>
+#include <QMetaObject>
 #include <QMessageBox>
+#include <QPointer>
+#include <QThread>
 #include <QtGlobal>
 
 #include <algorithm>
@@ -93,7 +96,7 @@ void OneG4Volume::setAudioEngine(AudioEngine* engine) {
 
   m_engine = engine;
 
-  connect(m_engine, &AudioEngine::sinkListChanged, this, &OneG4Volume::handleSinkListChanged);
+  connect(m_engine, &AudioEngine::sinkListChanged, this, &OneG4Volume::handleSinkListChanged, Qt::QueuedConnection);
 
   handleSinkListChanged();
 }
@@ -151,6 +154,20 @@ void OneG4Volume::settingsChanged() {
 }
 
 void OneG4Volume::handleSinkListChanged() {
+  if (QThread::currentThread() != thread()) {
+    QPointer<OneG4Volume> self(this);
+    QMetaObject::invokeMethod(
+        this,
+        [self]() {
+          if (!self) {
+            return;
+          }
+          self->handleSinkListChanged();
+        },
+        Qt::QueuedConnection);
+    return;
+  }
+
   if (!m_engine) {
     return;
   }
@@ -204,8 +221,8 @@ void OneG4Volume::handleSinkListChanged() {
       }
 
       if (auto* sink = m_defaultSink.data()) {
-        connect(sink, &AudioDevice::volumeChanged, this, [this] { showNotification(); });
-        connect(sink, &AudioDevice::muteChanged, this, [this] { showNotification(); });
+        connect(sink, &AudioDevice::volumeChanged, this, [this] { showNotification(); }, Qt::QueuedConnection);
+        connect(sink, &AudioDevice::muteChanged, this, [this] { showNotification(); }, Qt::QueuedConnection);
       }
     }
 

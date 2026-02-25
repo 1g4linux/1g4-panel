@@ -14,6 +14,8 @@
 #include <QTimer>
 #include <QMap>
 
+#include <atomic>
+
 #include <pipewire/pipewire.h>
 #include <pipewire/thread-loop.h>
 #include <pipewire/extensions/metadata.h>
@@ -68,6 +70,7 @@ class PipeWireEngine : public AudioEngine {
 
   bool m_ready;
   bool m_connecting;
+  std::atomic_bool m_isShuttingDown;
   int m_maximumVolume;
 
   QTimer m_reconnectionTimer;
@@ -102,6 +105,7 @@ class PipeWireEngine : public AudioEngine {
   bool setNodeMute(uint32_t nodeId, bool mute);
   bool setNodeDisabledMetadata(uint32_t nodeId, bool disabled);
   void setNodeEnabledState(AudioDevice* dev, bool enabled);
+  bool isShuttingDown() const noexcept { return m_isShuttingDown.load(std::memory_order_acquire); }
 
   void setReady(bool ready);
 

@@ -258,7 +258,7 @@ void PulseAudioEngine::addOrUpdateSink(const pa_sink_info* info) {
   }
 
   if (!dev) {
-    dev = new AudioDevice(Sink, this);
+    dev = new AudioDevice(Sink, this, this);
     newSink = true;
   }
 
@@ -299,7 +299,7 @@ void PulseAudioEngine::addOrUpdateSinkSnapshot(const QString& name,
   }
 
   if (!dev) {
-    dev = new AudioDevice(Sink, this);
+    dev = new AudioDevice(Sink, this, this);
     newSink = true;
   }
 

@@ -12,10 +12,12 @@
 #include <QDialog>
 #include <QEnterEvent>
 #include <QGuiApplication>
+#include <QMetaObject>
 #include <QPushButton>
 #include <QResizeEvent>
 #include <QScreen>
 #include <QSlider>
+#include <QThread>
 #include <QTimer>
 #include <QToolTip>
 #include <QVBoxLayout>
@@ -135,6 +137,20 @@ void VolumePopup::handleExternalMixerClicked() {
 }
 
 void VolumePopup::handleDeviceVolumeChanged(int volume) {
+  if (QThread::currentThread() != thread()) {
+    QPointer<VolumePopup> self(this);
+    QMetaObject::invokeMethod(
+        this,
+        [self, volume]() {
+          if (!self) {
+            return;
+          }
+          self->handleDeviceVolumeChanged(volume);
+        },
+        Qt::QueuedConnection);
+    return;
+  }
+
   const int boundedVolume = qBound(0, volume, 100);
   if (m_sliderDragActive || m_volumeSlider->isSliderDown()) {
     m_deferredBackendVolumePercent = boundedVolume;
@@ -148,6 +164,20 @@ void VolumePopup::handleDeviceVolumeChanged(int volume) {
 }
 
 void VolumePopup::handleDeviceMuteChanged(bool mute) {
+  if (QThread::currentThread() != thread()) {
+    QPointer<VolumePopup> self(this);
+    QMetaObject::invokeMethod(
+        this,
+        [self, mute]() {
+          if (!self) {
+            return;
+          }
+          self->handleDeviceMuteChanged(mute);
+        },
+        Qt::QueuedConnection);
+    return;
+  }
+
   m_muteToggleButton->setChecked(mute);
   updateStockIcon();
 }
@@ -217,8 +247,8 @@ void VolumePopup::setDevice(AudioDevice* device) {
   if (auto* dev = m_device.data()) {
     m_muteToggleButton->setChecked(dev->mute());
     handleDeviceVolumeChanged(dev->volume());
-    connect(dev, &AudioDevice::volumeChanged, this, &VolumePopup::handleDeviceVolumeChanged);
-    connect(dev, &AudioDevice::muteChanged, this, &VolumePopup::handleDeviceMuteChanged);
+    connect(dev, &AudioDevice::volumeChanged, this, &VolumePopup::handleDeviceVolumeChanged, Qt::QueuedConnection);
+    connect(dev, &AudioDevice::muteChanged, this, &VolumePopup::handleDeviceMuteChanged, Qt::QueuedConnection);
   }
   else {
     m_volumeSlider->blockSignals(true);
