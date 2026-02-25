@@ -36,7 +36,9 @@ OneG4Volume::OneG4Volume(const IOneG4PanelPluginStartupInfo& startupInfo)
       IOneG4PanelPlugin(startupInfo),
       m_engine(nullptr),
       m_defaultSinkId(0U),
+      m_defaultSourceId(0U),
       m_defaultSink(nullptr),
+      m_defaultSource(nullptr),
       m_configDialog(nullptr),
       m_mixerDialog(nullptr),
       m_alwaysShowNotifications(SETTINGS_DEFAULT_ALWAYS_SHOW_NOTIFICATIONS) {
@@ -79,6 +81,7 @@ void OneG4Volume::setAudioEngine(AudioEngine* engine) {
   }
 
   if (m_engine) {
+    setDefaultSource(nullptr);
     setDefaultSink(nullptr);
 
     disconnect(m_engine, nullptr, this, nullptr);
@@ -206,6 +209,27 @@ void OneG4Volume::handleSinkListChanged() {
     setDefaultSink(nullptr);
   }
 
+  const auto& sources = m_engine->sources();
+  if (!sources.isEmpty()) {
+    QList<uint> sourceIds;
+    sourceIds.reserve(sources.size());
+    for (const AudioDevice* source : sources) {
+      sourceIds.append(source->index());
+    }
+
+    m_defaultSourceId = chooseSinkId(sourceIds, QVariant(SETTINGS_DEFAULT_DEVICE), observedDefaultSourceId());
+    AudioDevice* defaultSource = findSourceById(sources, m_defaultSourceId);
+    if (!defaultSource) {
+      defaultSource = sources.first();
+      m_defaultSourceId = defaultSource->index();
+    }
+
+    setDefaultSource(defaultSource);
+  }
+  else {
+    setDefaultSource(nullptr);
+  }
+
   if (m_configDialog) {
     m_configDialog->setSinkList(sinks);
   }
@@ -242,29 +266,47 @@ void OneG4Volume::handleEngineStateChanged() {
   m_volumeButton->volumePopup()->setBackendAvailable(backendAvailable, health.message);
 
   const auto& sinks = m_engine->sinks();
-  if (sinks.isEmpty()) {
-    return;
+  if (!sinks.isEmpty()) {
+    QList<uint> sinkIds;
+    sinkIds.reserve(sinks.size());
+    for (const AudioDevice* sink : sinks) {
+      sinkIds.append(sink->index());
+    }
+
+    const QVariant storedSinkSetting = settings()->value(QStringLiteral(SETTINGS_DEVICE), SETTINGS_DEFAULT_DEVICE);
+    const uint desiredSinkId = chooseSinkId(sinkIds, storedSinkSetting, observedDefaultSinkId());
+    if (desiredSinkId != m_defaultSinkId) {
+      AudioDevice* desiredSink = findSinkById(sinks, desiredSinkId);
+      if (desiredSink) {
+        m_defaultSinkId = desiredSinkId;
+        setDefaultSink(desiredSink);
+      }
+    }
+  }
+  else {
+    setDefaultSink(nullptr);
   }
 
-  QList<uint> sinkIds;
-  sinkIds.reserve(sinks.size());
-  for (const AudioDevice* sink : sinks) {
-    sinkIds.append(sink->index());
-  }
+  const auto& sources = m_engine->sources();
+  if (!sources.isEmpty()) {
+    QList<uint> sourceIds;
+    sourceIds.reserve(sources.size());
+    for (const AudioDevice* source : sources) {
+      sourceIds.append(source->index());
+    }
 
-  const QVariant storedSinkSetting = settings()->value(QStringLiteral(SETTINGS_DEVICE), SETTINGS_DEFAULT_DEVICE);
-  const uint desiredSinkId = chooseSinkId(sinkIds, storedSinkSetting, observedDefaultSinkId());
-  if (desiredSinkId == m_defaultSinkId) {
-    return;
+    const uint desiredSourceId = chooseSinkId(sourceIds, QVariant(SETTINGS_DEFAULT_DEVICE), observedDefaultSourceId());
+    if (desiredSourceId != m_defaultSourceId) {
+      AudioDevice* desiredSource = findSourceById(sources, desiredSourceId);
+      if (desiredSource) {
+        m_defaultSourceId = desiredSourceId;
+        setDefaultSource(desiredSource);
+      }
+    }
   }
-
-  AudioDevice* desiredSink = findSinkById(sinks, desiredSinkId);
-  if (!desiredSink) {
-    return;
+  else {
+    setDefaultSource(nullptr);
   }
-
-  m_defaultSinkId = desiredSinkId;
-  setDefaultSink(desiredSink);
 
   if (m_configDialog) {
     m_configDialog->setSinkList(sinks);
@@ -281,6 +323,7 @@ void OneG4Volume::setDefaultSink(AudioDevice* sink) {
   }
 
   m_defaultSink = sink;
+  m_defaultSinkId = m_defaultSink ? m_defaultSink->index() : 0U;
 
   if (m_volumeButton && m_volumeButton->volumePopup()) {
     m_volumeButton->volumePopup()->setDevice(m_defaultSink);
@@ -289,6 +332,19 @@ void OneG4Volume::setDefaultSink(AudioDevice* sink) {
   if (auto* sink = m_defaultSink.data()) {
     connect(sink, &AudioDevice::volumeChanged, this, [this] { showNotification(); }, Qt::QueuedConnection);
     connect(sink, &AudioDevice::muteChanged, this, [this] { showNotification(); }, Qt::QueuedConnection);
+  }
+}
+
+void OneG4Volume::setDefaultSource(AudioDevice* source) {
+  if (source == m_defaultSource) {
+    return;
+  }
+
+  m_defaultSource = source;
+  m_defaultSourceId = m_defaultSource ? m_defaultSource->index() : 0U;
+
+  if (m_volumeButton && m_volumeButton->volumePopup()) {
+    m_volumeButton->volumePopup()->setInputDevice(m_defaultSource);
   }
 }
 
@@ -307,10 +363,34 @@ std::optional<uint> OneG4Volume::observedDefaultSinkId() const {
   return std::nullopt;
 }
 
+std::optional<uint> OneG4Volume::observedDefaultSourceId() const {
+  if (!m_engine) {
+    return std::nullopt;
+  }
+
+  const AudioEngine::StateSnapshot state = m_engine->stateSnapshot();
+  for (const AudioEngine::LogicalEndpointSnapshot& endpoint : state.logicalEndpoints) {
+    if (endpoint.direction == AudioEngine::EndpointDirection::Input && endpoint.isDefault) {
+      return endpoint.runtimeId;
+    }
+  }
+
+  return std::nullopt;
+}
+
 AudioDevice* OneG4Volume::findSinkById(const QList<AudioDevice*>& sinks, uint sinkId) const {
   for (AudioDevice* sink : sinks) {
     if (sink && sink->index() == sinkId) {
       return sink;
+    }
+  }
+  return nullptr;
+}
+
+AudioDevice* OneG4Volume::findSourceById(const QList<AudioDevice*>& sources, uint sourceId) const {
+  for (AudioDevice* source : sources) {
+    if (source && source->index() == sourceId) {
+      return source;
     }
   }
   return nullptr;

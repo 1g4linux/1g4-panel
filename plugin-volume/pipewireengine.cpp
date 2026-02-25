@@ -278,12 +278,16 @@ void PipeWireEngine::disconnectContext() {
   setObservedDefaultEndpointStableId(EndpointDirection::Output, QString());
   setObservedDefaultEndpointStableId(EndpointDirection::Input, QString());
 
-  bool removedSink = false;
+  bool removedEndpoint = false;
   for (AudioDevice* device : std::as_const(devicesToDelete)) {
     if (device->type() == Sink) {
-      removedSink = true;
+      removedEndpoint = true;
+      m_sinks.removeAll(device);
     }
-    m_sinks.removeAll(device);
+    else if (device->type() == Source) {
+      removedEndpoint = true;
+      m_sources.removeAll(device);
+    }
     delete device;
   }
 
@@ -315,7 +319,7 @@ void PipeWireEngine::disconnectContext() {
 
   pw_thread_loop_unlock(m_threadLoop);
 
-  if (removedSink) {
+  if (removedEndpoint) {
     emit sinkListChanged();
   }
 }
@@ -547,7 +551,9 @@ void PipeWireEngine::addOrUpdateNode(uint32_t id,
   }
 
   AudioDevice* dev = m_deviceByWpId.value(id, nullptr);
-  bool newDevice = (dev == nullptr);
+  const QString previousName = dev ? dev->name() : QString();
+  const bool wasSinkListed = dev && m_sinks.contains(dev);
+  const bool wasSourceListed = dev && m_sources.contains(dev);
   bool typeChanged = false;
 
   if (!dev) {
@@ -585,50 +591,43 @@ void PipeWireEngine::addOrUpdateNode(uint32_t id,
 
   bindNode(id);
 
-  // Add or remove from m_sinks based on type
-  if (newDevice) {
-    if (type == Sink) {
-      m_sinks.insert(std::lower_bound(m_sinks.begin(), m_sinks.end(), dev,
-                                      [](const AudioDevice* a, const AudioDevice* b) { return a->name() < b->name(); }),
-                     dev);
-      emit sinkListChanged();
+  auto insertSortedByName = [](QList<AudioDevice*>& devices, AudioDevice* device) {
+    devices.insert(std::lower_bound(devices.begin(), devices.end(), device,
+                                    [](const AudioDevice* left, const AudioDevice* right) {
+                                      Q_ASSERT(left != nullptr);
+                                      Q_ASSERT(right != nullptr);
+                                      return left->name() < right->name();
+                                    }),
+                   device);
+  };
+
+  bool endpointListChanged = false;
+  if (type == Sink) {
+    if (wasSourceListed) {
+      m_sources.removeAll(dev);
+      endpointListChanged = true;
     }
-    // For sources, don't add to m_sinks and don't emit sinkListChanged
+    m_sinks.removeAll(dev);
+    insertSortedByName(m_sinks, dev);
+    endpointListChanged = endpointListChanged || !wasSinkListed || typeChanged || previousName != qname;
   }
   else {
-    // Existing device updated
-    if (typeChanged) {
-      // Device type changed, need to move between m_sinks
-      if (type == Sink) {
-        // Became a sink - add to m_sinks if not already present
-        if (!m_sinks.contains(dev)) {
-          m_sinks.insert(
-              std::lower_bound(m_sinks.begin(), m_sinks.end(), dev,
-                               [](const AudioDevice* a, const AudioDevice* b) { return a->name() < b->name(); }),
-              dev);
-          emit sinkListChanged();
-        }
-      }
-      else {
-        // Became a source - remove from m_sinks if present
-        auto it = std::find(m_sinks.begin(), m_sinks.end(), dev);
-        if (it != m_sinks.end()) {
-          m_sinks.erase(it);
-          emit sinkListChanged();
-        }
-      }
+    if (wasSinkListed) {
+      m_sinks.removeAll(dev);
+      endpointListChanged = true;
     }
-    else if (type == Sink) {
-      // Type unchanged but is sink, emit changed signal
-      emit sinkListChanged();
-    }
-    // For sources, no signal
+    m_sources.removeAll(dev);
+    insertSortedByName(m_sources, dev);
+    endpointListChanged = endpointListChanged || !wasSourceListed || typeChanged || previousName != qname;
   }
 
-  // Query initial volume for sink devices after they are in m_sinks
-  if (type == Sink) {
-    queryNodeVolume(id);
+  if (endpointListChanged || type == Sink) {
+    emit sinkListChanged();
   }
+
+  // Fetch an initial state snapshot for both output and input nodes so popup
+  // controls reflect backend state immediately after discovery.
+  queryNodeVolume(id);
 }
 
 void PipeWireEngine::removeNode(uint32_t id) {
@@ -645,13 +644,16 @@ void PipeWireEngine::removeNode(uint32_t id) {
     setObservedDefaultEndpointStableId(EndpointDirection::Input, QString());
   }
 
-  // Remove from m_sinks if it's a sink
+  bool removedEndpoint = false;
   if (dev->type() == Sink) {
-    auto it = std::find(m_sinks.begin(), m_sinks.end(), dev);
-    if (it != m_sinks.end()) {
-      m_sinks.erase(it);
-      emit sinkListChanged();
-    }
+    removedEndpoint = m_sinks.removeAll(dev) > 0;
+  }
+  else if (dev->type() == Source) {
+    removedEndpoint = m_sources.removeAll(dev) > 0;
+  }
+
+  if (removedEndpoint) {
+    emit sinkListChanged();
   }
 
   unbindNode(id);

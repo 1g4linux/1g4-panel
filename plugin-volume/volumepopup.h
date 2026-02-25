@@ -22,9 +22,12 @@ class VolumePopup : public QDialog {
   void handleWheelEvent(QWheelEvent* event);
 
   QSlider* volumeSlider() const { return m_volumeSlider; }
+  QSlider* inputVolumeSlider() const { return m_inputVolumeSlider; }
 
   AudioDevice* device() const { return m_device; }
+  AudioDevice* inputDevice() const { return m_inputDevice; }
   void setDevice(AudioDevice* device);
+  void setInputDevice(AudioDevice* device);
   void setBackendAvailable(bool available, const QString& statusMessage = QString());
   void setSliderStep(int step);
 
@@ -52,23 +55,36 @@ class VolumePopup : public QDialog {
   void handleExternalMixerClicked();
   void handleDeviceVolumeChanged(int volume);
   void handleDeviceMuteChanged(bool mute);
+  void handleInputSliderValueChanged(int value);
+  void handleInputSliderPressed();
+  void handleInputSliderReleased();
+  void handleInputMuteToggleClicked();
+  void handleInputDeviceVolumeChanged(int volume);
+  void handleInputDeviceMuteChanged(bool mute);
 
  private:
   void realign();
   void updateStockIcon();
   void applyVolumeToSlider(int volume);
+  void applyInputVolumeToSlider(int volume);
   void updateControlAvailability();
   void updateStatusToolTip();
 
   QSlider* m_volumeSlider;
+  QSlider* m_inputVolumeSlider;
   QPushButton* m_muteToggleButton;
+  QPushButton* m_inputMuteToggleButton;
   QPushButton* m_externalMixerButton;
   QPoint m_pos;
   Qt::Corner m_anchor;
   QPointer<AudioDevice> m_device;
+  QPointer<AudioDevice> m_inputDevice;
   bool m_sliderDragActive;
   bool m_hasDeferredBackendVolume;
   int m_deferredBackendVolumePercent;
+  bool m_inputSliderDragActive;
+  bool m_hasDeferredBackendInputVolume;
+  int m_deferredBackendInputVolumePercent;
   bool m_backendAvailable;
   QString m_backendStatusMessage;
 };

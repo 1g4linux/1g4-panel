@@ -45,13 +45,18 @@ class OneG4Volume : public QObject, public IOneG4PanelPlugin {
 
  private:
   void setDefaultSink(AudioDevice* sink);
+  void setDefaultSource(AudioDevice* source);
   std::optional<uint> observedDefaultSinkId() const;
+  std::optional<uint> observedDefaultSourceId() const;
   AudioDevice* findSinkById(const QList<AudioDevice*>& sinks, uint sinkId) const;
+  AudioDevice* findSourceById(const QList<AudioDevice*>& sources, uint sourceId) const;
 
   AudioEngine* m_engine;
   VolumeButton* m_volumeButton;
   uint m_defaultSinkId;
+  uint m_defaultSourceId;
   QPointer<AudioDevice> m_defaultSink;
+  QPointer<AudioDevice> m_defaultSource;
   OneG4::Notification* m_notification;
   QPointer<OneG4VolumeConfiguration> m_configDialog;
   QPointer<QDialog> m_mixerDialog;

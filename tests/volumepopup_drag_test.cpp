@@ -34,6 +34,18 @@ class VolumePopupDummyEngine : public AudioEngine {
     return sink;
   }
 
+  AudioDevice* addSource(const QString& name, int initialVolume) {
+    auto* source = new AudioDevice(Source, this, this);
+    source->setName(name);
+    source->setDescription(name);
+    source->setIndex(static_cast<uint>(m_sources.size() + 100));
+    source->setVolumeNoCommit(initialVolume);
+    source->setMuteNoCommit(false);
+    source->setCardId(1);
+    m_sources.append(source);
+    return source;
+  }
+
  protected:
   bool commitDeviceVolume(AudioDevice* device) override {
     Q_UNUSED(device);
@@ -53,6 +65,9 @@ class VolumePopupDragTest : public QObject {
  private slots:
   void userVolumeSliderChangeUpdatesOutputDeviceVolume();
   void userMuteToggleUpdatesOutputDeviceMuteState();
+  void userInputVolumeSliderChangeUpdatesInputDeviceVolume();
+  void userInputMuteToggleUpdatesInputDeviceMuteState();
+  void outputStockIconTracksMutedLowMediumHighStates();
   void backendVolumeUpdatesDoNotMoveSliderWhileDragging();
   void staleDeferredBackendVolumeIsDiscardedAfterFurtherDrag();
   void backendUnavailableShowsErrorIconAndDisablesControls();
@@ -87,14 +102,7 @@ void VolumePopupDragTest::userMuteToggleUpdatesOutputDeviceMuteState() {
   VolumePopup popup;
   popup.setDevice(sink);
 
-  QPushButton* muteButton = nullptr;
-  for (QPushButton* candidate : popup.findChildren<QPushButton*>()) {
-    if (candidate && candidate->isCheckable()) {
-      muteButton = candidate;
-      break;
-    }
-  }
-
+  QPushButton* muteButton = popup.findChild<QPushButton*>(QStringLiteral("OutputMuteToggleButton"));
   QVERIFY(muteButton != nullptr);
   QCOMPARE(muteButton->isChecked(), false);
   QCOMPARE(sink->mute(), false);
@@ -106,6 +114,77 @@ void VolumePopupDragTest::userMuteToggleUpdatesOutputDeviceMuteState() {
   QTest::mouseClick(muteButton, Qt::LeftButton);
   QCOMPARE(muteButton->isChecked(), false);
   QCOMPARE(sink->mute(), false);
+}
+
+void VolumePopupDragTest::userInputVolumeSliderChangeUpdatesInputDeviceVolume() {
+  VolumePopupDummyEngine engine;
+  AudioDevice* source = engine.addSource(QStringLiteral("alsa_input.popup-user-volume"), 30);
+  QVERIFY(source != nullptr);
+
+  VolumePopup popup;
+  popup.setInputDevice(source);
+
+  QSlider* inputSlider = popup.inputVolumeSlider();
+  QVERIFY(inputSlider != nullptr);
+  QCOMPARE(inputSlider->value(), 30);
+
+  inputSlider->setValue(62);
+
+  QCOMPARE(source->volume(), 62);
+}
+
+void VolumePopupDragTest::userInputMuteToggleUpdatesInputDeviceMuteState() {
+  VolumePopupDummyEngine engine;
+  AudioDevice* source = engine.addSource(QStringLiteral("alsa_input.popup-user-mute"), 45);
+  QVERIFY(source != nullptr);
+
+  VolumePopup popup;
+  popup.setInputDevice(source);
+
+  QPushButton* muteButton = popup.findChild<QPushButton*>(QStringLiteral("InputMuteToggleButton"));
+  QVERIFY(muteButton != nullptr);
+  QCOMPARE(muteButton->isChecked(), false);
+  QCOMPARE(source->mute(), false);
+
+  QTest::mouseClick(muteButton, Qt::LeftButton);
+  QCOMPARE(muteButton->isChecked(), true);
+  QCOMPARE(source->mute(), true);
+
+  QTest::mouseClick(muteButton, Qt::LeftButton);
+  QCOMPARE(muteButton->isChecked(), false);
+  QCOMPARE(source->mute(), false);
+}
+
+void VolumePopupDragTest::outputStockIconTracksMutedLowMediumHighStates() {
+  VolumePopupDummyEngine engine;
+  AudioDevice* sink = engine.addSink(QStringLiteral("alsa_output.popup-icon-states"), 10);
+  QVERIFY(sink != nullptr);
+
+  VolumePopup popup;
+  popup.setDevice(sink);
+
+  QSignalSpy stockIconSpy(&popup, &VolumePopup::stockIconChanged);
+
+  sink->setVolumeNoCommit(0);
+  QCoreApplication::processEvents();
+  QVERIFY(!stockIconSpy.isEmpty());
+  QCOMPARE(stockIconSpy.last().at(0).toString(), QStringLiteral("audio-volume-muted-panel"));
+
+  sink->setVolumeNoCommit(20);
+  QCoreApplication::processEvents();
+  QCOMPARE(stockIconSpy.last().at(0).toString(), QStringLiteral("audio-volume-low-panel"));
+
+  sink->setVolumeNoCommit(50);
+  QCoreApplication::processEvents();
+  QCOMPARE(stockIconSpy.last().at(0).toString(), QStringLiteral("audio-volume-medium-panel"));
+
+  sink->setVolumeNoCommit(90);
+  QCoreApplication::processEvents();
+  QCOMPARE(stockIconSpy.last().at(0).toString(), QStringLiteral("audio-volume-high-panel"));
+
+  sink->setMuteNoCommit(true);
+  QCoreApplication::processEvents();
+  QCOMPARE(stockIconSpy.last().at(0).toString(), QStringLiteral("audio-volume-muted-panel"));
 }
 
 void VolumePopupDragTest::backendVolumeUpdatesDoNotMoveSliderWhileDragging() {

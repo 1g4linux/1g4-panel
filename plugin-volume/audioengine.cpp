@@ -103,6 +103,7 @@ AudioEngine::~AudioEngine() {
     delete device;
   }
   m_sinks.clear();
+  m_sources.clear();
 }
 
 int AudioEngine::volumeBounded(int volume, AudioDevice* device) const {

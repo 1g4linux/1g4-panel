@@ -118,6 +118,7 @@ class AudioEngine : public QObject {
   ~AudioEngine();
 
   const QList<AudioDevice*>& sinks() const { return m_sinks; }
+  const QList<AudioDevice*>& sources() const { return m_sources; }
   StateSnapshot stateSnapshot() const;
   QList<SinkSnapshot> sinkSnapshots() const;
   virtual BackendCapabilities backendCapabilities() const;
@@ -163,6 +164,7 @@ class AudioEngine : public QObject {
   void setObservedDefaultEndpoint(EndpointDirection direction, const AudioDevice* device);
 
   QList<AudioDevice*> m_sinks;
+  QList<AudioDevice*> m_sources;
   bool m_ignoreMaxVolume;
 
  private:

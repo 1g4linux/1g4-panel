@@ -80,6 +80,19 @@ class VolumeDefaultSyncDummyEngine final : public AudioEngine {
     return sink;
   }
 
+  AudioDevice* addSource(const QString& name, const QString& description, uint runtimeId) {
+    auto* source = new AudioDevice(Source, this, this);
+    source->setName(name);
+    source->setDescription(description);
+    source->setIndex(runtimeId);
+    source->setVolumeNoCommit(45);
+    source->setMuteNoCommit(false);
+    source->setCardId(1);
+    m_sources.append(source);
+    emit sinkListChanged();
+    return source;
+  }
+
   void setObservedDefaultSinkByRuntimeId(uint runtimeId) {
     AudioDevice* sink = nullptr;
     for (AudioDevice* candidate : std::as_const(m_sinks)) {
@@ -90,6 +103,18 @@ class VolumeDefaultSyncDummyEngine final : public AudioEngine {
     }
 
     setObservedDefaultEndpoint(EndpointDirection::Output, sink);
+  }
+
+  void setObservedDefaultSourceByRuntimeId(uint runtimeId) {
+    AudioDevice* source = nullptr;
+    for (AudioDevice* candidate : std::as_const(m_sources)) {
+      if (candidate && candidate->index() == runtimeId) {
+        source = candidate;
+        break;
+      }
+    }
+
+    setObservedDefaultEndpoint(EndpointDirection::Input, source);
   }
 
  protected:
@@ -111,6 +136,7 @@ class VolumeDefaultSinkSyncTest : public QObject {
  private slots:
   void autoSelectionTracksObservedDefaultSink();
   void explicitSelectionOverridesObservedDefaultSink();
+  void observedDefaultInputTracksPopupInputDevice();
 };
 
 void VolumeDefaultSinkSyncTest::autoSelectionTracksObservedDefaultSink() {
@@ -183,6 +209,46 @@ void VolumeDefaultSinkSyncTest::explicitSelectionOverridesObservedDefaultSink() 
   QTest::qWait(50);
   QVERIFY(plugin.m_defaultSink != nullptr);
   QCOMPARE(plugin.m_defaultSink->index(), 10U);
+}
+
+void VolumeDefaultSinkSyncTest::observedDefaultInputTracksPopupInputDevice() {
+  QTemporaryDir tempDir;
+  QVERIFY(tempDir.isValid());
+
+  const QString settingsPath = tempDir.filePath(QStringLiteral("panel-test.ini"));
+  OneG4::Settings settings(settingsPath, QSettings::IniFormat);
+  std::unique_ptr<PluginSettings> pluginSettings(
+      PluginSettingsFactory::create(&settings, QStringLiteral("volume-test"), &settings));
+  QVERIFY(pluginSettings != nullptr);
+
+  pluginSettings->setValue(QStringLiteral(SETTINGS_DEVICE), SETTINGS_DEFAULT_DEVICE);
+  pluginSettings->setValue(QStringLiteral(SETTINGS_AUDIO_ENGINE), QStringLiteral("UnknownBackend"));
+
+  VolumeDefaultSyncDummyPanel panel;
+  const IOneG4PanelPluginStartupInfo startupInfo{&panel, pluginSettings.get(), nullptr};
+  OneG4Volume plugin(startupInfo);
+
+  auto* engine = new VolumeDefaultSyncDummyEngine;
+  engine->addSink(QStringLiteral("alsa_output.primary"), QStringLiteral("Primary Output"), 10U);
+  engine->addSource(QStringLiteral("alsa_input.primary"), QStringLiteral("Primary Input"), 101U);
+  engine->addSource(QStringLiteral("alsa_input.secondary"), QStringLiteral("Secondary Input"), 202U);
+  engine->setObservedDefaultSinkByRuntimeId(10U);
+  engine->setObservedDefaultSourceByRuntimeId(101U);
+
+  plugin.setAudioEngine(engine);
+
+  QVERIFY(plugin.m_defaultSource != nullptr);
+  QCOMPARE(plugin.m_defaultSource->index(), 101U);
+  QVERIFY(plugin.m_volumeButton != nullptr);
+  QVERIFY(plugin.m_volumeButton->volumePopup()->inputDevice() != nullptr);
+  QCOMPARE(plugin.m_volumeButton->volumePopup()->inputDevice()->index(), 101U);
+
+  engine->setObservedDefaultSourceByRuntimeId(202U);
+
+  QTRY_VERIFY_WITH_TIMEOUT(plugin.m_defaultSource != nullptr, 300);
+  QTRY_COMPARE_WITH_TIMEOUT(plugin.m_defaultSource->index(), 202U, 300);
+  QVERIFY(plugin.m_volumeButton->volumePopup()->inputDevice() != nullptr);
+  QCOMPARE(plugin.m_volumeButton->volumePopup()->inputDevice()->index(), 202U);
 }
 
 QTEST_MAIN(VolumeDefaultSinkSyncTest)

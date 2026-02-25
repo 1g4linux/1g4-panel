@@ -12,6 +12,7 @@
 #include <QDialog>
 #include <QEnterEvent>
 #include <QGuiApplication>
+#include <QHBoxLayout>
 #include <QMetaObject>
 #include <QPushButton>
 #include <QResizeEvent>
@@ -31,21 +32,38 @@ VolumePopup::VolumePopup(QWidget* parent)
       m_pos(0, 0),
       m_anchor(Qt::TopLeftCorner),
       m_device(nullptr),
+      m_inputDevice(nullptr),
       m_sliderDragActive(false),
       m_hasDeferredBackendVolume(false),
       m_deferredBackendVolumePercent(0),
+      m_inputSliderDragActive(false),
+      m_hasDeferredBackendInputVolume(false),
+      m_deferredBackendInputVolumePercent(0),
       m_backendAvailable(true),
       m_backendStatusMessage() {
   m_volumeSlider = new QSlider(Qt::Vertical, this);
+  m_volumeSlider->setObjectName(QStringLiteral("OutputVolumeSlider"));
   m_volumeSlider->setTickPosition(QSlider::TicksBothSides);
   m_volumeSlider->setTickInterval(10);
   m_volumeSlider->setRange(0, 100);
   m_volumeSlider->installEventFilter(this);
 
+  m_inputVolumeSlider = new QSlider(Qt::Horizontal, this);
+  m_inputVolumeSlider->setObjectName(QStringLiteral("InputVolumeSlider"));
+  m_inputVolumeSlider->setTickPosition(QSlider::NoTicks);
+  m_inputVolumeSlider->setRange(0, 100);
+
   m_muteToggleButton = new QPushButton(this);
+  m_muteToggleButton->setObjectName(QStringLiteral("OutputMuteToggleButton"));
   m_muteToggleButton->setIcon(XdgIcon::fromTheme(QLatin1String("audio-volume-muted-panel")));
   m_muteToggleButton->setCheckable(true);
   m_muteToggleButton->setAutoDefault(false);
+
+  m_inputMuteToggleButton = new QPushButton(this);
+  m_inputMuteToggleButton->setObjectName(QStringLiteral("InputMuteToggleButton"));
+  m_inputMuteToggleButton->setIcon(XdgIcon::fromTheme(QLatin1String("audio-input-microphone-muted-panel")));
+  m_inputMuteToggleButton->setCheckable(true);
+  m_inputMuteToggleButton->setAutoDefault(false);
 
   m_externalMixerButton = new QPushButton(this);
   m_externalMixerButton->setObjectName(QStringLiteral("MixerLink"));
@@ -55,18 +73,31 @@ VolumePopup::VolumePopup(QWidget* parent)
   m_externalMixerButton->setMinimumWidth(1);
   m_externalMixerButton->setAutoDefault(false);
 
+  auto* inputControlsLayout = new QHBoxLayout();
+  inputControlsLayout->setSpacing(4);
+  inputControlsLayout->setContentsMargins(QMargins());
+  inputControlsLayout->addWidget(m_inputMuteToggleButton, 0, Qt::AlignVCenter);
+  inputControlsLayout->addWidget(m_inputVolumeSlider, 1, Qt::AlignVCenter);
+
   auto* layout = new QVBoxLayout(this);
-  layout->setSpacing(0);
+  layout->setSpacing(2);
   layout->setContentsMargins(QMargins());
 
   layout->addWidget(m_externalMixerButton, 0, Qt::AlignHCenter);
   layout->addWidget(m_volumeSlider, 0, Qt::AlignHCenter);
   layout->addWidget(m_muteToggleButton, 0, Qt::AlignHCenter);
+  layout->addLayout(inputControlsLayout);
 
   connect(m_volumeSlider, &QSlider::valueChanged, this, &VolumePopup::handleSliderValueChanged);
   connect(m_volumeSlider, &QSlider::sliderPressed, this, &VolumePopup::handleSliderPressed);
   connect(m_volumeSlider, &QSlider::sliderReleased, this, &VolumePopup::handleSliderReleased);
   connect(m_muteToggleButton, &QPushButton::clicked, this, &VolumePopup::handleMuteToggleClicked);
+
+  connect(m_inputVolumeSlider, &QSlider::valueChanged, this, &VolumePopup::handleInputSliderValueChanged);
+  connect(m_inputVolumeSlider, &QSlider::sliderPressed, this, &VolumePopup::handleInputSliderPressed);
+  connect(m_inputVolumeSlider, &QSlider::sliderReleased, this, &VolumePopup::handleInputSliderReleased);
+  connect(m_inputMuteToggleButton, &QPushButton::clicked, this, &VolumePopup::handleInputMuteToggleClicked);
+
   connect(m_externalMixerButton, &QPushButton::clicked, this, &VolumePopup::handleExternalMixerClicked);
 
   updateControlAvailability();
@@ -137,6 +168,44 @@ void VolumePopup::handleMuteToggleClicked() {
   m_device->toggleMute();
 }
 
+void VolumePopup::handleInputSliderValueChanged(int value) {
+  if (!m_backendAvailable || !m_inputDevice) {
+    return;
+  }
+
+  if (m_inputSliderDragActive || m_inputVolumeSlider->isSliderDown()) {
+    m_hasDeferredBackendInputVolume = false;
+  }
+
+  m_inputDevice->setVolume(value);
+  updateStatusToolTip();
+
+  QTimer::singleShot(0, this, [this] { QToolTip::showText(QCursor::pos(), m_inputVolumeSlider->toolTip(), this); });
+}
+
+void VolumePopup::handleInputSliderPressed() {
+  m_inputSliderDragActive = true;
+}
+
+void VolumePopup::handleInputSliderReleased() {
+  m_inputSliderDragActive = false;
+  if (!m_hasDeferredBackendInputVolume) {
+    return;
+  }
+
+  const int deferredVolume = m_deferredBackendInputVolumePercent;
+  m_hasDeferredBackendInputVolume = false;
+  applyInputVolumeToSlider(deferredVolume);
+}
+
+void VolumePopup::handleInputMuteToggleClicked() {
+  if (!m_inputDevice) {
+    return;
+  }
+
+  m_inputDevice->toggleMute();
+}
+
 void VolumePopup::handleExternalMixerClicked() {
   emit externalMixerRequested();
 }
@@ -184,7 +253,52 @@ void VolumePopup::handleDeviceMuteChanged(bool mute) {
   }
 
   m_muteToggleButton->setChecked(mute);
+  updateStatusToolTip();
   updateStockIcon();
+}
+
+void VolumePopup::handleInputDeviceVolumeChanged(int volume) {
+  if (QThread::currentThread() != thread()) {
+    QPointer<VolumePopup> self(this);
+    QMetaObject::invokeMethod(
+        this,
+        [self, volume]() {
+          if (!self) {
+            return;
+          }
+          self->handleInputDeviceVolumeChanged(volume);
+        },
+        Qt::QueuedConnection);
+    return;
+  }
+
+  const int boundedVolume = qBound(0, volume, 100);
+  if (m_inputSliderDragActive || m_inputVolumeSlider->isSliderDown()) {
+    m_deferredBackendInputVolumePercent = boundedVolume;
+    m_hasDeferredBackendInputVolume = true;
+    return;
+  }
+
+  applyInputVolumeToSlider(boundedVolume);
+}
+
+void VolumePopup::handleInputDeviceMuteChanged(bool mute) {
+  if (QThread::currentThread() != thread()) {
+    QPointer<VolumePopup> self(this);
+    QMetaObject::invokeMethod(
+        this,
+        [self, mute]() {
+          if (!self) {
+            return;
+          }
+          self->handleInputDeviceMuteChanged(mute);
+        },
+        Qt::QueuedConnection);
+    return;
+  }
+
+  m_inputMuteToggleButton->setChecked(mute);
+  updateStatusToolTip();
 }
 
 void VolumePopup::updateStockIcon() {
@@ -279,6 +393,39 @@ void VolumePopup::setDevice(AudioDevice* device) {
   emit deviceChanged();
 }
 
+void VolumePopup::setInputDevice(AudioDevice* device) {
+  if (device == m_inputDevice) {
+    return;
+  }
+
+  if (m_inputDevice) {
+    disconnect(m_inputDevice, &AudioDevice::volumeChanged, this, &VolumePopup::handleInputDeviceVolumeChanged);
+    disconnect(m_inputDevice, &AudioDevice::muteChanged, this, &VolumePopup::handleInputDeviceMuteChanged);
+  }
+
+  m_inputDevice = device;
+  m_inputSliderDragActive = false;
+  m_hasDeferredBackendInputVolume = false;
+  m_deferredBackendInputVolumePercent = 0;
+
+  if (auto* input = m_inputDevice.data()) {
+    m_inputMuteToggleButton->setChecked(input->mute());
+    handleInputDeviceVolumeChanged(input->volume());
+    connect(input, &AudioDevice::volumeChanged, this, &VolumePopup::handleInputDeviceVolumeChanged, Qt::QueuedConnection);
+    connect(input, &AudioDevice::muteChanged, this, &VolumePopup::handleInputDeviceMuteChanged, Qt::QueuedConnection);
+  }
+  else {
+    m_inputVolumeSlider->blockSignals(true);
+    m_inputVolumeSlider->setValue(0);
+    m_inputVolumeSlider->blockSignals(false);
+
+    m_inputMuteToggleButton->setChecked(true);
+  }
+
+  updateControlAvailability();
+  updateStatusToolTip();
+}
+
 void VolumePopup::setBackendAvailable(bool available, const QString& statusMessage) {
   const bool availabilityChanged = (m_backendAvailable != available);
   const QString normalizedStatus = available ? QString() : statusMessage.trimmed();
@@ -299,6 +446,8 @@ void VolumePopup::setBackendAvailable(bool available, const QString& statusMessa
 void VolumePopup::setSliderStep(int step) {
   m_volumeSlider->setSingleStep(step);
   m_volumeSlider->setPageStep(step * 10);
+  m_inputVolumeSlider->setSingleStep(step);
+  m_inputVolumeSlider->setPageStep(step * 10);
 }
 
 void VolumePopup::applyVolumeToSlider(int volume) {
@@ -308,30 +457,71 @@ void VolumePopup::applyVolumeToSlider(int volume) {
   updateStatusToolTip();
 }
 
+void VolumePopup::applyInputVolumeToSlider(int volume) {
+  m_inputVolumeSlider->blockSignals(true);
+  m_inputVolumeSlider->setValue(volume);
+  m_inputVolumeSlider->blockSignals(false);
+  updateStatusToolTip();
+}
+
 void VolumePopup::updateControlAvailability() {
-  const bool controlsEnabled = m_backendAvailable && m_device;
-  m_volumeSlider->setEnabled(controlsEnabled);
-  m_muteToggleButton->setEnabled(controlsEnabled);
+  const bool outputControlsEnabled = m_backendAvailable && m_device;
+  m_volumeSlider->setEnabled(outputControlsEnabled);
+  m_muteToggleButton->setEnabled(outputControlsEnabled);
+
+  const bool inputControlsEnabled = m_backendAvailable && m_inputDevice;
+  m_inputVolumeSlider->setEnabled(inputControlsEnabled);
+  m_inputMuteToggleButton->setEnabled(inputControlsEnabled);
+
+  const bool showInputControls = (m_inputDevice != nullptr);
+  m_inputVolumeSlider->setVisible(showInputControls);
+  m_inputMuteToggleButton->setVisible(showInputControls);
 }
 
 void VolumePopup::updateStatusToolTip() {
-  QString tip;
+  QString outputTip;
+  QString inputTip;
+
   if (!m_backendAvailable) {
-    tip = tr("Audio backend unavailable");
+    outputTip = tr("Audio backend unavailable");
     if (!m_backendStatusMessage.isEmpty()) {
-      tip = tr("Audio backend unavailable: %1").arg(m_backendStatusMessage);
+      outputTip = tr("Audio backend unavailable: %1").arg(m_backendStatusMessage);
     }
-  }
-  else if (!m_device) {
-    tip = tr("No audio output device");
+    inputTip = outputTip;
   }
   else {
-    tip = QStringLiteral("%1%").arg(m_volumeSlider->value());
+    outputTip = m_device ? QStringLiteral("%1%").arg(m_volumeSlider->value()) : tr("No audio output device");
+
+    if (m_inputDevice) {
+      const QString inputPercent = QStringLiteral("%1%").arg(m_inputVolumeSlider->value());
+      inputTip = tr("Mic: %1%2").arg(inputPercent, m_inputDevice->mute() ? tr(" (muted)") : QString());
+    }
+    else {
+      inputTip = tr("No microphone input device");
+    }
   }
 
-  m_volumeSlider->setToolTip(tip);
+  m_volumeSlider->setToolTip(outputTip);
+  m_inputVolumeSlider->setToolTip(inputTip);
+
+  QString parentTip;
+  if (!m_backendAvailable) {
+    parentTip = outputTip;
+  }
+  else if (m_device && m_inputDevice) {
+    const QString outputPercent = QStringLiteral("%1%").arg(m_volumeSlider->value());
+    const QString inputPercent = QStringLiteral("%1%").arg(m_inputVolumeSlider->value());
+    parentTip = tr("Output: %1\nMic: %2%3").arg(outputPercent, inputPercent, m_inputDevice->mute() ? tr(" (muted)") : QString());
+  }
+  else if (m_inputDevice) {
+    parentTip = inputTip;
+  }
+  else {
+    parentTip = outputTip;
+  }
+
   if (auto* parent = parentWidget()) {
-    parent->setToolTip(tip);
+    parent->setToolTip(parentTip);
   }
 }
 
