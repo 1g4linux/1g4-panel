@@ -65,6 +65,13 @@ add_test(
 )
 
 add_test(
+    NAME plugin_volume_dependency_checks_guard
+    COMMAND ${CMAKE_COMMAND}
+            -DONEG4_PANEL_CMAKE=${CMAKE_SOURCE_DIR}/CMakeLists.txt
+            -P ${CMAKE_CURRENT_SOURCE_DIR}/check_volume_dependency_checks_guard.cmake
+)
+
+add_test(
     NAME plugin_volume_logging_categories_guard
     COMMAND ${CMAKE_COMMAND}
             -DONEG4_VOLUME_LOGGING_HEADER=${CMAKE_SOURCE_DIR}/plugin-volume/volumelogging.h
