@@ -69,6 +69,22 @@ class SnapshotDummyEngine : public AudioEngine {
     return sink;
   }
 
+  AudioDevice* addSource(const QString& name,
+                         const QString& description,
+                         uint runtimeId,
+                         int volume,
+                         bool mute,
+                         int cardId) {
+    auto* source = new AudioDevice(Source, this, this);
+    source->setName(name);
+    source->setDescription(description);
+    source->setIndex(runtimeId);
+    source->setVolumeNoCommit(volume);
+    source->setMuteNoCommit(mute);
+    source->setCardId(cardId);
+    return source;
+  }
+
   void setCapabilities(bool profileSwitching, bool streamMove, bool battery, bool perPortSelection) {
     m_capabilities = BackendCapabilities{
         profileSwitching,
@@ -192,21 +208,32 @@ void AudioEngineSnapshotTest::stateSnapshotSeparatesPhysicalDevicesLogicalEndpoi
                  20, false, 7);
   engine.addSink(QStringLiteral("alsa_output.pci-0000_00_1f.3.hdmi-stereo"), QStringLiteral("Built-in HDMI"), 11U, 70,
                  true, 7);
+  engine.addSource(QStringLiteral("alsa_input.pci-0000_00_1f.3.analog-stereo"), QStringLiteral("Built-in Mic"), 12U,
+                   45, false, 7);
 
   const AudioEngine::StateSnapshot state = engine.stateSnapshot();
 
   QCOMPARE(state.physicalDevices.size(), 1);
-  QCOMPARE(state.logicalEndpoints.size(), 2);
+  QCOMPARE(state.logicalEndpoints.size(), 3);
   QVERIFY(state.streams.isEmpty());
 
   const QString physicalStableId = state.physicalDevices.first().stableId;
   QVERIFY(!physicalStableId.isEmpty());
   QCOMPARE(state.physicalDevices.first().cardId, 7);
 
+  int outputCount = 0;
+  int inputCount = 0;
   for (const AudioEngine::LogicalEndpointSnapshot& endpoint : state.logicalEndpoints) {
     QCOMPARE(endpoint.physicalDeviceStableId, physicalStableId);
-    QCOMPARE(endpoint.direction, AudioEngine::EndpointDirection::Output);
+    if (endpoint.direction == AudioEngine::EndpointDirection::Output) {
+      ++outputCount;
+    }
+    else if (endpoint.direction == AudioEngine::EndpointDirection::Input) {
+      ++inputCount;
+    }
   }
+  QCOMPARE(outputCount, 2);
+  QCOMPARE(inputCount, 1);
 }
 
 void AudioEngineSnapshotTest::stateSnapshotIncludesBackendCapabilitiesFlags() {

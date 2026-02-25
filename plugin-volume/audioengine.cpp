@@ -98,7 +98,8 @@ AudioEngine::AudioEngine(QObject* parent)
 }
 
 AudioEngine::~AudioEngine() {
-  for (AudioDevice* device : std::as_const(m_sinks)) {
+  const QList<AudioDevice*> devices = findChildren<AudioDevice*>(QString(), Qt::FindDirectChildrenOnly);
+  for (AudioDevice* device : devices) {
     delete device;
   }
   m_sinks.clear();
@@ -170,12 +171,42 @@ AudioEngine::StateSnapshot AudioEngine::stateSnapshot() const {
   StateSnapshot snapshot;
   snapshot.capabilities = backendCapabilities();
   snapshot.backendHealth = m_backendHealth;
-  snapshot.logicalEndpoints.reserve(m_sinks.size());
+
+  QList<AudioDevice*> devices = findChildren<AudioDevice*>(QString(), Qt::FindDirectChildrenOnly);
+  std::sort(devices.begin(), devices.end(), [](const AudioDevice* left, const AudioDevice* right) {
+    Q_ASSERT(left != nullptr);
+    Q_ASSERT(right != nullptr);
+
+    const int leftType = static_cast<int>(left->type());
+    const int rightType = static_cast<int>(right->type());
+    if (leftType != rightType) {
+      return leftType < rightType;
+    }
+
+    const QString leftName = left->name().trimmed();
+    const QString rightName = right->name().trimmed();
+    const int nameCompare = QString::compare(leftName, rightName, Qt::CaseSensitive);
+    if (nameCompare != 0) {
+      return nameCompare < 0;
+    }
+
+    if (left->index() != right->index()) {
+      return left->index() < right->index();
+    }
+
+    if (left->cardId() != right->cardId()) {
+      return left->cardId() < right->cardId();
+    }
+
+    return left < right;
+  });
+
+  snapshot.logicalEndpoints.reserve(devices.size());
 
   QHash<QString, int> physicalIndexByStableId;
-  physicalIndexByStableId.reserve(m_sinks.size());
+  physicalIndexByStableId.reserve(devices.size());
 
-  for (const AudioDevice* device : std::as_const(m_sinks)) {
+  for (const AudioDevice* device : std::as_const(devices)) {
     Q_ASSERT(device != nullptr);
 
     const QString physicalStableId = makePhysicalStableId(*device);
