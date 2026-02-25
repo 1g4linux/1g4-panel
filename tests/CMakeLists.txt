@@ -38,6 +38,27 @@ add_test(
     COMMAND plugin_volume_audioengine_snapshot_test
 )
 
+if(PIPEWIRE_FOUND)
+add_executable(plugin_volume_pipewireengine_restart_test
+    pipewireengine_restart_test.cpp
+    ${CMAKE_SOURCE_DIR}/plugin-volume/pipewireengine.cpp
+    ${CMAKE_SOURCE_DIR}/plugin-volume/audioengine.cpp
+    ${CMAKE_SOURCE_DIR}/plugin-volume/audiodevice.cpp
+    ${CMAKE_SOURCE_DIR}/plugin-volume/volumelogging.cpp
+)
+target_include_directories(plugin_volume_pipewireengine_restart_test
+    PRIVATE
+        ${CMAKE_SOURCE_DIR}/plugin-volume
+        ${PIPEWIRE_INCLUDE_DIRS}
+)
+target_link_libraries(plugin_volume_pipewireengine_restart_test PRIVATE Qt6::Core Qt6::Test ${PIPEWIRE_LIBRARIES})
+
+add_test(
+    NAME plugin_volume_pipewireengine_restart_test
+    COMMAND plugin_volume_pipewireengine_restart_test
+)
+endif()
+
 add_executable(plugin_volume_volumepopup_drag_test
     volumepopup_drag_test.cpp
     ${CMAKE_SOURCE_DIR}/plugin-volume/volumepopup.cpp

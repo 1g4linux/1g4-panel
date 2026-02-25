@@ -230,6 +230,32 @@ void PipeWireEngine::disconnectContext() {
   if (!m_threadLoop)
     return;
 
+  // Reconnect must start from a clean snapshot; stale node proxies and runtime ids
+  // become invalid once the core disconnects.
+  const QList<uint32_t> nodeIds = m_nodeByNodeId.keys();
+  for (uint32_t nodeId : nodeIds) {
+    unbindNode(nodeId);
+  }
+
+  QSet<AudioDevice*> devicesToDelete;
+  devicesToDelete.reserve(m_deviceByWpId.size());
+  for (AudioDevice* device : std::as_const(m_deviceByWpId)) {
+    if (device) {
+      devicesToDelete.insert(device);
+    }
+  }
+  m_deviceByWpId.clear();
+  m_nodeIdByDevice.clear();
+
+  bool removedSink = false;
+  for (AudioDevice* device : std::as_const(devicesToDelete)) {
+    if (device->type() == Sink) {
+      removedSink = true;
+    }
+    m_sinks.removeAll(device);
+    delete device;
+  }
+
   pw_thread_loop_lock(m_threadLoop);
 
   if (m_metadata) {
@@ -257,6 +283,10 @@ void PipeWireEngine::disconnectContext() {
   setReady(false);
 
   pw_thread_loop_unlock(m_threadLoop);
+
+  if (removedSink) {
+    emit sinkListChanged();
+  }
 }
 
 void PipeWireEngine::reconnect() {
