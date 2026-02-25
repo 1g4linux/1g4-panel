@@ -3,6 +3,7 @@
  */
 
 #include "wireplumberpolicy.h"
+#include "volumelogging.h"
 
 #include <QDir>
 #include <QFile>
@@ -86,7 +87,7 @@ bool WirePlumberPolicy::load() {
   if (!file.exists())
     return true;
   if (!file.open(QIODevice::ReadOnly)) {
-    qWarning() << "WirePlumberPolicy: unable to open policy file" << file.fileName();
+    qCWarning(lcVolumePersistence) << "WirePlumberPolicy: unable to open policy file" << file.fileName();
     return false;
   }
 
@@ -175,7 +176,7 @@ bool WirePlumberPolicy::write() const {
 
   QFile file(filePath());
   if (!file.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
-    qWarning() << "WirePlumberPolicy: unable to write policy file" << file.fileName();
+    qCWarning(lcVolumePersistence) << "WirePlumberPolicy: unable to write policy file" << file.fileName();
     return false;
   }
 

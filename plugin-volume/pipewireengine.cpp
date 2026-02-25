@@ -4,6 +4,7 @@
 
 #include "pipewireengine.h"
 #include "audiodevice.h"
+#include "volumelogging.h"
 
 #include <QMetaObject>
 #include <QLoggingCategory>
@@ -48,7 +49,7 @@ PipeWireEngine::PipeWireEngine(QObject* parent)
 
   m_threadLoop = pw_thread_loop_new("oneg4-volume", nullptr);
   if (!m_threadLoop) {
-    qWarning() << "PipeWireEngine: unable to create thread loop";
+    qCWarning(lcVolumeBackend) << "PipeWireEngine: unable to create thread loop";
     return;
   }
 
@@ -56,7 +57,7 @@ PipeWireEngine::PipeWireEngine(QObject* parent)
 
   m_context = pw_context_new(pw_thread_loop_get_loop(m_threadLoop), nullptr, 0);
   if (!m_context) {
-    qWarning() << "PipeWireEngine: unable to create context";
+    qCWarning(lcVolumeBackend) << "PipeWireEngine: unable to create context";
     pw_thread_loop_unlock(m_threadLoop);
     pw_thread_loop_destroy(m_threadLoop);
     m_threadLoop = nullptr;
@@ -64,7 +65,7 @@ PipeWireEngine::PipeWireEngine(QObject* parent)
   }
 
   if (pw_thread_loop_start(m_threadLoop) < 0) {
-    qWarning() << "PipeWireEngine: unable to start thread loop";
+    qCWarning(lcVolumeBackend) << "PipeWireEngine: unable to start thread loop";
     pw_context_destroy(m_context);
     m_context = nullptr;
     pw_thread_loop_unlock(m_threadLoop);
@@ -165,7 +166,7 @@ void PipeWireEngine::connectContext() {
 
   m_core = pw_context_connect(m_context, nullptr, 0);
   if (!m_core) {
-    qWarning() << "PipeWireEngine: failed to connect to PipeWire core";
+    qCWarning(lcVolumeBackend) << "PipeWireEngine: failed to connect to PipeWire core";
     pw_thread_loop_unlock(m_threadLoop);
     m_connecting = false;
     m_reconnectionTimer.start();
@@ -190,7 +191,7 @@ void PipeWireEngine::connectContext() {
 
   m_registry = pw_core_get_registry(m_core, PW_VERSION_REGISTRY, 0);
   if (!m_registry) {
-    qWarning() << "PipeWireEngine: failed to get registry";
+    qCWarning(lcVolumeBackend) << "PipeWireEngine: failed to get registry";
     pw_thread_loop_unlock(m_threadLoop);
     m_connecting = false;
     m_reconnectionTimer.start();
@@ -261,7 +262,7 @@ void PipeWireEngine::setReady(bool ready) {
 
 void PipeWireEngine::handleContextStateChanged() {
   if (!m_ready) {
-    qWarning() << "PipeWireEngine: context not ready, scheduling reconnect";
+    qCWarning(lcVolumeBackend) << "PipeWireEngine: context not ready, scheduling reconnect";
     m_reconnectionTimer.start();
   }
 }
@@ -276,7 +277,7 @@ void PipeWireEngine::onCoreError(void* data, uint32_t id, int seq, int res, cons
   if (!engine) {
     return;
   }
-  qWarning() << "PipeWireEngine: core error" << message;
+  qCWarning(lcVolumeBackend) << "PipeWireEngine: core error" << message;
   QPointer<PipeWireEngine> enginePtr(engine);
   QMetaObject::invokeMethod(
       engine,
@@ -426,6 +427,9 @@ void PipeWireEngine::addOrUpdateNode(uint32_t id,
   qCDebug(lcPipeWireEngine) << "PipeWireEngine: addOrUpdateNode id" << id << "name:" << qname << "desc:" << qdesc
                             << "mediaClass:" << (type == Sink ? "Audio/Sink" : "Audio/Source")
                             << (isBluetooth ? "[Bluetooth]" : "");
+  if (isBluetooth) {
+    qCDebug(lcVolumeBluetooth) << "PipeWireEngine: discovered Bluetooth node" << qname << "id" << id;
+  }
 
   AudioDevice* dev = m_deviceByWpId.value(id, nullptr);
   bool newDevice = (dev == nullptr);
@@ -538,7 +542,7 @@ void PipeWireEngine::bindNode(uint32_t id) {
 
   pw_node* node = static_cast<pw_node*>(pw_registry_bind(m_registry, id, PW_TYPE_INTERFACE_Node, PW_VERSION_NODE, 0));
   if (!node) {
-    qWarning() << "PipeWireEngine: failed to bind to node" << id;
+    qCWarning(lcVolumeBackend) << "PipeWireEngine: failed to bind to node" << id;
     pw_thread_loop_unlock(m_threadLoop);
     return;
   }
@@ -609,7 +613,7 @@ void PipeWireEngine::bindMetadata(uint32_t id) {
   pw_metadata* metadata =
       static_cast<pw_metadata*>(pw_registry_bind(m_registry, id, PW_TYPE_INTERFACE_Metadata, PW_VERSION_METADATA, 0));
   if (!metadata) {
-    qWarning() << "PipeWireEngine: failed to bind metadata object" << id;
+    qCWarning(lcVolumeBackend) << "PipeWireEngine: failed to bind metadata object" << id;
     pw_thread_loop_unlock(m_threadLoop);
     return;
   }
@@ -780,7 +784,7 @@ void PipeWireEngine::queryNodeVolume(uint32_t nodeId) {
 
   int res = pw_node_enum_params(node, 0, SPA_PARAM_Props, 0, UINT32_MAX, nullptr);
   if (res < 0) {
-    qWarning() << "PipeWireEngine: failed to enum params for node" << nodeId << "error:" << res;
+    qCWarning(lcVolumeBackend) << "PipeWireEngine: failed to enum params for node" << nodeId << "error:" << res;
   }
   else {
     qCDebug(lcPipeWireEngine) << "PipeWireEngine: queried volume/mute for node" << nodeId;
@@ -816,7 +820,7 @@ void PipeWireEngine::setNodeVolume(uint32_t nodeId, float volume) {
   if (param) {
     int res = pw_node_set_param(node, SPA_PARAM_Props, 0, param);
     if (res < 0) {
-      qWarning() << "PipeWireEngine: failed to set volume for node" << nodeId << "error:" << res;
+      qCWarning(lcVolumeBackend) << "PipeWireEngine: failed to set volume for node" << nodeId << "error:" << res;
     }
     else {
       // Find device for logging
@@ -831,6 +835,8 @@ void PipeWireEngine::setNodeVolume(uint32_t nodeId, float volume) {
       }
       qCDebug(lcPipeWireEngine) << "PipeWireEngine: set volume for node" << nodeId << "device" << devName
                                 << (isBluetooth ? "[Bluetooth]" : "") << "to" << volume;
+      qCDebug(lcVolumeRouting) << "PipeWireEngine: routed volume update to node" << nodeId << "device" << devName
+                               << "volume" << volume;
     }
   }
 
@@ -862,7 +868,7 @@ void PipeWireEngine::setNodeMute(uint32_t nodeId, bool mute) {
   if (param) {
     int res = pw_node_set_param(node, SPA_PARAM_Props, 0, param);
     if (res < 0) {
-      qWarning() << "PipeWireEngine: failed to set mute for node" << nodeId << "error:" << res;
+      qCWarning(lcVolumeBackend) << "PipeWireEngine: failed to set mute for node" << nodeId << "error:" << res;
     }
     else {
       // Find device for logging
@@ -877,6 +883,14 @@ void PipeWireEngine::setNodeMute(uint32_t nodeId, bool mute) {
       }
       qCDebug(lcPipeWireEngine) << "PipeWireEngine: set mute for node" << nodeId << "device" << devName
                                 << (isBluetooth ? "[Bluetooth]" : "") << "to" << mute;
+      if (isBluetooth) {
+        qCDebug(lcVolumeBluetooth) << "PipeWireEngine: applied Bluetooth mute update for node" << nodeId << "device"
+                                   << devName << "mute" << mute;
+      }
+      else {
+        qCDebug(lcVolumeRouting) << "PipeWireEngine: applied mute update for node" << nodeId << "device" << devName
+                                 << "mute" << mute;
+      }
     }
   }
 
@@ -891,7 +905,7 @@ bool PipeWireEngine::setNodeDisabledMetadata(uint32_t nodeId, bool disabled) {
   const int res =
       pw_metadata_set_property(m_metadata, nodeId, "node.disabled", "Spa:Bool", disabled ? "true" : "false");
   if (res < 0) {
-    qWarning() << "PipeWireEngine: failed to set node.disabled for" << nodeId << "error" << res;
+    qCWarning(lcVolumeBackend) << "PipeWireEngine: failed to set node.disabled for" << nodeId << "error" << res;
     pw_thread_loop_unlock(m_threadLoop);
     return false;
   }
@@ -934,6 +948,14 @@ void PipeWireEngine::commitDeviceVolume(AudioDevice* device) {
   qCDebug(lcPipeWireEngine) << "PipeWireEngine: commitDeviceVolume device" << devName
                             << (isBluetooth ? "[Bluetooth]" : "") << "node" << nodeId << "volume" << percent
                             << "% (" << volume << ")";
+  if (isBluetooth) {
+    qCDebug(lcVolumeBluetooth) << "PipeWireEngine: committing Bluetooth volume for" << devName << "node" << nodeId
+                               << "percent" << percent;
+  }
+  else {
+    qCDebug(lcVolumeRouting) << "PipeWireEngine: committing volume for" << devName << "node" << nodeId << "percent"
+                             << percent;
+  }
 
   setNodeVolume(nodeId, volume);
 }
@@ -950,6 +972,14 @@ void PipeWireEngine::setMute(AudioDevice* device, bool state) {
   const bool isBluetooth = devName.contains(QLatin1String("bluez"), Qt::CaseInsensitive);
   qCDebug(lcPipeWireEngine) << "PipeWireEngine: setMute device" << devName << (isBluetooth ? "[Bluetooth]" : "")
                             << "node" << nodeId << "mute" << state;
+  if (isBluetooth) {
+    qCDebug(lcVolumeBluetooth) << "PipeWireEngine: committing Bluetooth mute for" << devName << "node" << nodeId
+                               << "mute" << state;
+  }
+  else {
+    qCDebug(lcVolumeRouting) << "PipeWireEngine: committing mute for" << devName << "node" << nodeId << "mute"
+                             << state;
+  }
 
   setNodeMute(nodeId, state);
 }

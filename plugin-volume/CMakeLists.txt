@@ -9,6 +9,7 @@ set(HEADERS
     audioengine.h
     wireplumberpolicy.h
     sinkselection.h
+    volumelogging.h
 )
 
 
@@ -21,6 +22,7 @@ set(SOURCES
     audioengine.cpp
     wireplumberpolicy.cpp
     sinkselection.cpp
+    volumelogging.cpp
 )
 
 

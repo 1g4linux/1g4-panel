@@ -55,3 +55,15 @@ add_test(
             -DPIPEWIRE_ENGINE_SOURCE=${CMAKE_SOURCE_DIR}/plugin-volume/pipewireengine.cpp
             -P ${CMAKE_CURRENT_SOURCE_DIR}/check_pipewire_debug_logging_guard.cmake
 )
+
+add_test(
+    NAME plugin_volume_logging_categories_guard
+    COMMAND ${CMAKE_COMMAND}
+            -DONEG4_VOLUME_LOGGING_HEADER=${CMAKE_SOURCE_DIR}/plugin-volume/volumelogging.h
+            -DONEG4_VOLUME_LOGGING_SOURCE=${CMAKE_SOURCE_DIR}/plugin-volume/volumelogging.cpp
+            -DONEG4_VOLUME_SOURCE=${CMAKE_SOURCE_DIR}/plugin-volume/oneg4volume.cpp
+            -DPULSEAUDIO_ENGINE_SOURCE=${CMAKE_SOURCE_DIR}/plugin-volume/pulseaudioengine.cpp
+            -DPIPEWIRE_ENGINE_SOURCE=${CMAKE_SOURCE_DIR}/plugin-volume/pipewireengine.cpp
+            -DWIREPLUMBER_POLICY_SOURCE=${CMAKE_SOURCE_DIR}/plugin-volume/wireplumberpolicy.cpp
+            -P ${CMAKE_CURRENT_SOURCE_DIR}/check_volume_logging_categories_guard.cmake
+)

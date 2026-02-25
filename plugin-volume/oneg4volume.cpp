@@ -8,6 +8,7 @@
 #include "audioengine.h"
 #include "oneg4volumeconfiguration.h"
 #include "sinkselection.h"
+#include "volumelogging.h"
 #ifdef USE_PIPEWIRE
 #include "pipewireengine.h"
 #endif
@@ -246,6 +247,7 @@ void OneG4Volume::showNotification() const {
 
 void OneG4Volume::openMixer() {
   if (!m_engine) {
+    qCWarning(lcVolumeUi) << "OneG4Volume: mixer requested but no audio engine is available";
     QMessageBox::warning(m_volumeButton, tr("Audio"), tr("No audio engine is available"));
     return;
   }
@@ -253,6 +255,7 @@ void OneG4Volume::openMixer() {
   if (!m_mixerDialog) {
     m_mixerDialog = create_1g4_mixer_dialog();
     if (!m_mixerDialog) {
+      qCWarning(lcVolumeUi) << "OneG4Volume: failed to create mixer dialog";
       QMessageBox::warning(m_volumeButton, tr("Audio"), tr("Failed to create mixer dialog"));
       return;
     }

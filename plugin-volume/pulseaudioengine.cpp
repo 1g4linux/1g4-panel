@@ -5,6 +5,7 @@
 #include "pulseaudioengine.h"
 
 #include "audiodevice.h"
+#include "volumelogging.h"
 
 #include <QMetaObject>
 #include <QMetaType>
@@ -22,8 +23,8 @@ static void sinkInfoCallback(pa_context* context, const pa_sink_info* info, int 
 
   if (isLast < 0) {
     pa_threaded_mainloop_signal(pulseEngine->mainloop(), 0);
-    qWarning() << QStringLiteral("Failed to get sink information: %1")
-                      .arg(QString::fromUtf8(pa_strerror(pa_context_errno(context))));
+    qCWarning(lcVolumeBackend) << QStringLiteral("Failed to get sink information: %1")
+                                      .arg(QString::fromUtf8(pa_strerror(pa_context_errno(context))));
     return;
   }
 
@@ -58,7 +59,7 @@ static void contextEventCallback(pa_context* context, const char* name, pa_propl
   Q_UNUSED(userdata);
 
 #ifdef PULSEAUDIO_ENGINE_DEBUG
-  qWarning("event received %s", name);
+  qCDebug(lcVolumeBackend) << "PulseAudioEngine: event received" << name;
 #else
   Q_UNUSED(name);
 #endif
@@ -74,28 +75,28 @@ static void contextStateCallback(pa_context* context, void* userdata) {
 #ifdef PULSEAUDIO_ENGINE_DEBUG
   switch (state) {
     case PA_CONTEXT_UNCONNECTED:
-      qWarning("context unconnected");
+      qCDebug(lcVolumeBackend) << "PulseAudioEngine: context unconnected";
       break;
     case PA_CONTEXT_CONNECTING:
-      qWarning("context connecting");
+      qCDebug(lcVolumeBackend) << "PulseAudioEngine: context connecting";
       break;
     case PA_CONTEXT_AUTHORIZING:
-      qWarning("context authorizing");
+      qCDebug(lcVolumeBackend) << "PulseAudioEngine: context authorizing";
       break;
     case PA_CONTEXT_SETTING_NAME:
-      qWarning("context setting name");
+      qCDebug(lcVolumeBackend) << "PulseAudioEngine: context setting name";
       break;
     case PA_CONTEXT_READY:
-      qWarning("context ready");
+      qCDebug(lcVolumeBackend) << "PulseAudioEngine: context ready";
       break;
     case PA_CONTEXT_FAILED:
-      qWarning("context failed");
+      qCDebug(lcVolumeBackend) << "PulseAudioEngine: context failed";
       break;
     case PA_CONTEXT_TERMINATED:
-      qWarning("context terminated");
+      qCDebug(lcVolumeBackend) << "PulseAudioEngine: context terminated";
       break;
     default:
-      qWarning("we should never hit this state");
+      qCDebug(lcVolumeBackend) << "PulseAudioEngine: unexpected context state";
   }
 #endif
 
@@ -149,12 +150,12 @@ PulseAudioEngine::PulseAudioEngine(QObject* parent)
 
   m_mainLoop = pa_threaded_mainloop_new();
   if (m_mainLoop == nullptr) {
-    qWarning("Unable to create pulseaudio mainloop");
+    qCWarning(lcVolumeBackend) << "PulseAudioEngine: unable to create PulseAudio mainloop";
     return;
   }
 
   if (pa_threaded_mainloop_start(m_mainLoop) != 0) {
-    qWarning("Unable to start pulseaudio mainloop");
+    qCWarning(lcVolumeBackend) << "PulseAudioEngine: unable to start PulseAudio mainloop";
     pa_threaded_mainloop_free(m_mainLoop);
     m_mainLoop = nullptr;
     return;
@@ -339,7 +340,8 @@ void PulseAudioEngine::setupSubscription() {
 
 void PulseAudioEngine::handleContextStateChanged() {
   if (m_contextState == PA_CONTEXT_FAILED || m_contextState == PA_CONTEXT_TERMINATED) {
-    qWarning("OneG4-Volume: Context connection failed or terminated lets try to reconnect");
+    qCWarning(lcVolumeBackend)
+        << "PulseAudioEngine: context failed or terminated, scheduling reconnection";
     m_reconnectionTimer.start();
   }
 }
@@ -394,8 +396,8 @@ void PulseAudioEngine::connectContext() {
 
       case PA_CONTEXT_FAILED:
       default:
-        qWarning() << QStringLiteral("Connection failure: %1")
-                          .arg(QString::fromUtf8(pa_strerror(pa_context_errno(m_context))));
+        qCWarning(lcVolumeBackend) << QStringLiteral("Connection failure: %1")
+                                          .arg(QString::fromUtf8(pa_strerror(pa_context_errno(m_context))));
         keepGoing = false;
         break;
     }
