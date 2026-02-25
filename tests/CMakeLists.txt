@@ -72,6 +72,41 @@ add_test(
 )
 
 add_test(
+    NAME plugin_volume_build_integration_guard
+    COMMAND ${CMAKE_COMMAND}
+            -DONEG4_PANEL_CMAKE=${CMAKE_SOURCE_DIR}/CMakeLists.txt
+            -DVOLUME_PLUGIN_CMAKE=${CMAKE_SOURCE_DIR}/plugin-volume/CMakeLists.txt
+            -P ${CMAKE_CURRENT_SOURCE_DIR}/check_volume_build_integration_guard.cmake
+)
+
+add_test(
+    NAME plugin_volume_standalone_dev_path_guard
+    COMMAND ${CMAKE_COMMAND}
+            -DONEG4_PANEL_CMAKE=${CMAKE_SOURCE_DIR}/CMakeLists.txt
+            -P ${CMAKE_CURRENT_SOURCE_DIR}/check_volume_standalone_dev_path_guard.cmake
+)
+
+add_test(
+    NAME plugin_volume_dev_flags_guard
+    COMMAND ${CMAKE_COMMAND}
+            -DONEG4_PANEL_CMAKE=${CMAKE_SOURCE_DIR}/CMakeLists.txt
+            -DVOLUME_PLUGIN_CMAKE=${CMAKE_SOURCE_DIR}/plugin-volume/CMakeLists.txt
+            -DONEG4_VOLUME_SOURCE=${CMAKE_SOURCE_DIR}/plugin-volume/oneg4volume.cpp
+            -DONEG4_VOLUME_CONFIGURATION_SOURCE=${CMAKE_SOURCE_DIR}/plugin-volume/oneg4volumeconfiguration.cpp
+            -P ${CMAKE_CURRENT_SOURCE_DIR}/check_volume_dev_flags_guard.cmake
+)
+
+add_test(
+    NAME plugin_volume_feature_toggles_guard
+    COMMAND ${CMAKE_COMMAND}
+            -DONEG4_PANEL_CMAKE=${CMAKE_SOURCE_DIR}/CMakeLists.txt
+            -DVOLUME_PLUGIN_CMAKE=${CMAKE_SOURCE_DIR}/plugin-volume/CMakeLists.txt
+            -DONEG4_VOLUME_SOURCE=${CMAKE_SOURCE_DIR}/plugin-volume/oneg4volume.cpp
+            -DONEG4_VOLUME_CONFIGURATION_SOURCE=${CMAKE_SOURCE_DIR}/plugin-volume/oneg4volumeconfiguration.cpp
+            -P ${CMAKE_CURRENT_SOURCE_DIR}/check_volume_feature_toggles_guard.cmake
+)
+
+add_test(
     NAME plugin_volume_logging_categories_guard
     COMMAND ${CMAKE_COMMAND}
             -DONEG4_VOLUME_LOGGING_HEADER=${CMAKE_SOURCE_DIR}/plugin-volume/volumelogging.h

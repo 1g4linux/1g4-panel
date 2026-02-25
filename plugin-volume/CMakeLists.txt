@@ -34,18 +34,13 @@ set(UIS
 set(LIBRARIES ${LIBRARIES})
 
 # Audio backend selection
-find_package(PkgConfig REQUIRED)
-
-# PipeWire backend
-pkg_check_modules(PIPEWIRE libpipewire-0.3)
-if(PIPEWIRE_FOUND)
-  add_definitions(-DUSE_PIPEWIRE)
-  include_directories(SYSTEM ${PIPEWIRE_INCLUDE_DIRS})
-  set(LIBRARIES ${LIBRARIES} ${PIPEWIRE_LIBRARIES})
-  message(STATUS "Volume plugin: PipeWire backend available")
-else()
-  message(STATUS "Volume plugin: PipeWire backend not available")
+if(NOT PIPEWIRE_FOUND)
+  message(FATAL_ERROR "Volume plugin requires top-level PipeWire detection (PIPEWIRE_FOUND)")
 endif()
+add_definitions(-DUSE_PIPEWIRE)
+include_directories(SYSTEM ${PIPEWIRE_INCLUDE_DIRS})
+set(LIBRARIES ${LIBRARIES} ${PIPEWIRE_LIBRARIES})
+message(STATUS "Volume plugin: PipeWire backend available")
 
 # PulseAudio backend
 pkg_check_modules(PULSEAUDIO libpulse)
@@ -56,11 +51,6 @@ if(PULSEAUDIO_FOUND)
   message(STATUS "Volume plugin: PulseAudio backend available")
 else()
   message(STATUS "Volume plugin: PulseAudio backend not available")
-endif()
-
-# Ensure at least one backend is available
-if(NOT PIPEWIRE_FOUND AND NOT PULSEAUDIO_FOUND)
-  message(FATAL_ERROR "Volume plugin: No audio backend found. Need at least PipeWire or PulseAudio.")
 endif()
 
 # Conditionally add engine sources and headers
@@ -76,6 +66,12 @@ if(PULSEAUDIO_FOUND)
   set(MOCS ${MOCS} pulseaudioengine.h)
 endif()
 
+if(ONEG4_VOLUME_DEV_TEST_BACKENDS)
+  set(SOURCES ${SOURCES} testaudioengine.cpp)
+  set(HEADERS ${HEADERS} testaudioengine.h)
+  set(MOCS ${MOCS} testaudioengine.h)
+endif()
+
 add_subdirectory(1g4-mixer)
 
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/1g4-mixer/src)
@@ -85,3 +81,15 @@ set(LIBRARIES ${LIBRARIES} 1g4-mixer)
 
 BUILD_ONEG4_PLUGIN(${PLUGIN})
 target_compile_definitions(${PLUGIN} PRIVATE ONEG4_MIXER_LIBRARY=1)
+if(ONEG4_VOLUME_DEV_VERBOSE_LOGGING)
+  target_compile_definitions(${PLUGIN} PRIVATE ONEG4_VOLUME_DEV_VERBOSE_LOGGING=1)
+endif()
+if(ONEG4_VOLUME_DEV_TEST_BACKENDS)
+  target_compile_definitions(${PLUGIN} PRIVATE ONEG4_VOLUME_DEV_TEST_BACKENDS=1)
+endif()
+if(ONEG4_VOLUME_ENABLE_WIREPLUMBER_POLICY)
+  target_compile_definitions(${PLUGIN} PRIVATE ONEG4_VOLUME_ENABLE_WIREPLUMBER_POLICY=1)
+endif()
+if(ONEG4_VOLUME_ENABLE_BLUETOOTH_BATTERY)
+  target_compile_definitions(${PLUGIN} PRIVATE ONEG4_VOLUME_ENABLE_BLUETOOTH_BATTERY=1)
+endif()

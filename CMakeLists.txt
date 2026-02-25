@@ -8,6 +8,11 @@ project(1g4-panel)
 include(CTest)
 
 option(WITH_SCREENSAVER_FALLBACK "Include support for converting the deprecated 'screensaver' plugin to 'quicklaunch'. This requires the oneg4-leave (oneg4-session) to be installed in runtime." ON)
+option(ONEG4_DEV_VOLUME_ONLY "Build only the volume plugin and shared compatibility library for faster local iteration." OFF)
+option(ONEG4_VOLUME_DEV_VERBOSE_LOGGING "Enable verbose logging defaults for volume plugin development." OFF)
+option(ONEG4_VOLUME_DEV_TEST_BACKENDS "Enable development-only test backends for the volume plugin." OFF)
+option(ONEG4_VOLUME_ENABLE_WIREPLUMBER_POLICY "Enable WirePlumber policy integration in the volume plugin." ON)
+option(ONEG4_VOLUME_ENABLE_BLUETOOTH_BATTERY "Enable Bluetooth battery integration in the volume plugin." OFF)
 
 # additional cmake files
 set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} ${CMAKE_CURRENT_SOURCE_DIR}/cmake)
@@ -120,6 +125,15 @@ include("cmake/BuildPlugin.cmake")
 
 set(ENABLED_PLUGINS) # list of enabled plugins
 set(STATIC_PLUGINS) # list of statically linked plugins
+
+if(ONEG4_DEV_VOLUME_ONLY)
+    message(STATUS "ONEG4_DEV_VOLUME_ONLY=ON: building only the volume plugin path")
+    setByDefault(TASKBAR_PLUGIN No)
+    setByDefault(STATUSNOTIFIER_PLUGIN No)
+    setByDefault(WORLDCLOCK_PLUGIN No)
+    setByDefault(SPACER_PLUGIN No)
+    setByDefault(VOLUME_PLUGIN Yes)
+endif()
 
 setByDefault(COLORPICKER_PLUGIN No)
 if(COLORPICKER_PLUGIN)
@@ -277,6 +291,10 @@ if(VOLUME_PLUGIN)
     message(STATUS "    PipeWire: ${PIPEWIRE_VERSION}")
     message(STATUS "    WirePlumber: ${WIREPLUMBER_VERSION}")
     message(STATUS "    BlueZ: ${BLUEZ_VERSION}")
+    message(STATUS "    Dev verbose logging: ${ONEG4_VOLUME_DEV_VERBOSE_LOGGING}")
+    message(STATUS "    Dev test backends: ${ONEG4_VOLUME_DEV_TEST_BACKENDS}")
+    message(STATUS "    WirePlumber policy integration: ${ONEG4_VOLUME_ENABLE_WIREPLUMBER_POLICY}")
+    message(STATUS "    Bluetooth battery integration: ${ONEG4_VOLUME_ENABLE_BLUETOOTH_BATTERY}")
     message(STATUS "")
     add_subdirectory(plugin-volume)
 endif()
@@ -311,10 +329,12 @@ foreach (PLUGIN_STR ${ENABLED_PLUGINS})
 endforeach()
 message(STATUS "*********************************************************************")
 
-add_subdirectory(panel)
+if(NOT ONEG4_DEV_VOLUME_ONLY)
+    add_subdirectory(panel)
 
-# merged from oneg4-common
-add_subdirectory(autostart)
+    # merged from oneg4-common
+    add_subdirectory(autostart)
+endif()
 
 if(BUILD_TESTING)
     add_subdirectory(tests)

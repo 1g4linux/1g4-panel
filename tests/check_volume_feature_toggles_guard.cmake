@@ -1,0 +1,55 @@
+if(NOT DEFINED ONEG4_PANEL_CMAKE)
+    message(FATAL_ERROR "ONEG4_PANEL_CMAKE is required")
+endif()
+if(NOT DEFINED VOLUME_PLUGIN_CMAKE)
+    message(FATAL_ERROR "VOLUME_PLUGIN_CMAKE is required")
+endif()
+if(NOT DEFINED ONEG4_VOLUME_SOURCE)
+    message(FATAL_ERROR "ONEG4_VOLUME_SOURCE is required")
+endif()
+if(NOT DEFINED ONEG4_VOLUME_CONFIGURATION_SOURCE)
+    message(FATAL_ERROR "ONEG4_VOLUME_CONFIGURATION_SOURCE is required")
+endif()
+
+file(READ "${ONEG4_PANEL_CMAKE}" ONEG4_PANEL_CMAKE_CONTENT)
+file(READ "${VOLUME_PLUGIN_CMAKE}" VOLUME_PLUGIN_CMAKE_CONTENT)
+file(READ "${ONEG4_VOLUME_SOURCE}" ONEG4_VOLUME_CONTENT)
+file(READ "${ONEG4_VOLUME_CONFIGURATION_SOURCE}" ONEG4_VOLUME_CONFIGURATION_CONTENT)
+
+foreach(OPTION_DECL
+        "option(ONEG4_VOLUME_ENABLE_WIREPLUMBER_POLICY"
+        "option(ONEG4_VOLUME_ENABLE_BLUETOOTH_BATTERY")
+    string(FIND "${ONEG4_PANEL_CMAKE_CONTENT}" "${OPTION_DECL}" OPTION_DECL_POS)
+    if(OPTION_DECL_POS EQUAL -1)
+        message(FATAL_ERROR "Missing optional integration toggle: ${OPTION_DECL}")
+    endif()
+endforeach()
+
+foreach(PLUGIN_CHECK
+        "if(ONEG4_VOLUME_ENABLE_WIREPLUMBER_POLICY)"
+        "ONEG4_VOLUME_ENABLE_WIREPLUMBER_POLICY=1"
+        "if(ONEG4_VOLUME_ENABLE_BLUETOOTH_BATTERY)"
+        "ONEG4_VOLUME_ENABLE_BLUETOOTH_BATTERY=1")
+    string(FIND "${VOLUME_PLUGIN_CMAKE_CONTENT}" "${PLUGIN_CHECK}" PLUGIN_CHECK_POS)
+    if(PLUGIN_CHECK_POS EQUAL -1)
+        message(FATAL_ERROR "Missing build toggle wiring: ${PLUGIN_CHECK}")
+    endif()
+endforeach()
+
+foreach(SOURCE_CHECK
+        "#ifdef ONEG4_VOLUME_ENABLE_BLUETOOTH_BATTERY"
+        "qCDebug(lcVolumeBluetooth)")
+    string(FIND "${ONEG4_VOLUME_CONTENT}" "${SOURCE_CHECK}" SOURCE_CHECK_POS)
+    if(SOURCE_CHECK_POS EQUAL -1)
+        message(FATAL_ERROR "Missing runtime integration toggle handling: ${SOURCE_CHECK}")
+    endif()
+endforeach()
+
+foreach(CONFIG_CHECK
+        "#ifdef ONEG4_VOLUME_ENABLE_WIREPLUMBER_POLICY"
+        "ui->policyGroupBox->hide();")
+    string(FIND "${ONEG4_VOLUME_CONFIGURATION_CONTENT}" "${CONFIG_CHECK}" CONFIG_CHECK_POS)
+    if(CONFIG_CHECK_POS EQUAL -1)
+        message(FATAL_ERROR "Missing UI gating for WirePlumber policy integration: ${CONFIG_CHECK}")
+    endif()
+endforeach()

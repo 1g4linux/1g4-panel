@@ -27,7 +27,11 @@ OneG4VolumeConfiguration::OneG4VolumeConfiguration(PluginSettings* settings, boo
       mLockSettingChanges(false),
       mUpdatingPolicyTree(false),
       mPolicyDirty(false),
+#ifdef ONEG4_VOLUME_ENABLE_WIREPLUMBER_POLICY
       m_policy(std::make_unique<WirePlumberPolicy>()) {
+#else
+      m_policy(nullptr) {
+#endif
   ui->setupUi(this);
 
   if (m_policy)
@@ -45,10 +49,17 @@ OneG4VolumeConfiguration::OneG4VolumeConfiguration(PluginSettings* settings, boo
           &OneG4VolumeConfiguration::ignoreMaxVolumeCheckBoxChanged);
   connect(ui->alwaysShowNotificationsCheckBox, &QAbstractButton::toggled, this,
           &OneG4VolumeConfiguration::alwaysShowNotificationsCheckBoxChanged);
-  connect(ui->policyTree, &QTreeWidget::itemChanged, this, &OneG4VolumeConfiguration::policyItemChanged);
-  connect(ui->applyPolicyButton, &QPushButton::clicked, this, &OneG4VolumeConfiguration::applyPolicy);
-  ui->policyTree->setRootIsDecorated(false);
-  ui->policyTree->setAlternatingRowColors(true);
+
+  if (m_policy) {
+    connect(ui->policyTree, &QTreeWidget::itemChanged, this, &OneG4VolumeConfiguration::policyItemChanged);
+    connect(ui->applyPolicyButton, &QPushButton::clicked, this, &OneG4VolumeConfiguration::applyPolicy);
+    ui->policyTree->setRootIsDecorated(false);
+    ui->policyTree->setAlternatingRowColors(true);
+  }
+  else {
+    ui->policyGroupBox->hide();
+  }
+
   setPolicyDirty(false);
 }
 
@@ -161,6 +172,9 @@ void OneG4VolumeConfiguration::loadSettings() {
 #endif
 #ifdef USE_PIPEWIRE
   ui->audioBackendCombo->addItem(QLatin1String("PipeWire"));
+#endif
+#ifdef ONEG4_VOLUME_DEV_TEST_BACKENDS
+  ui->audioBackendCombo->addItem(QLatin1String("TestBackend"));
 #endif
   // If no backends, combo will be empty (should not happen)
   const QString currentBackend =

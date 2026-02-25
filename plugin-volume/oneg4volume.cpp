@@ -15,12 +15,16 @@
 #ifdef USE_PULSEAUDIO
 #include "pulseaudioengine.h"
 #endif
+#ifdef ONEG4_VOLUME_DEV_TEST_BACKENDS
+#include "testaudioengine.h"
+#endif
 #include "volumebutton.h"
 #include "volumepopup.h"
 #include "1g4-mixer.h"
 
 #include <OneG4/Notification.h>
 #include <QDialog>
+#include <QLoggingCategory>
 #include <QMessageBox>
 #include <QtGlobal>
 #include <OneG4/XdgIcon.h>
@@ -39,6 +43,22 @@ OneG4Volume::OneG4Volume(const IOneG4PanelPluginStartupInfo& startupInfo)
   m_volumeButton = new VolumeButton(this);
 
   m_notification = new OneG4::Notification(QString(), this);
+
+#ifdef ONEG4_VOLUME_DEV_VERBOSE_LOGGING
+  QLoggingCategory::setFilterRules(QStringLiteral(
+      "oneg4.panel.plugin.volume.ui.debug=true\n"
+      "oneg4.panel.plugin.volume.backend.debug=true\n"
+      "oneg4.panel.plugin.volume.bluetooth.debug=true\n"
+      "oneg4.panel.plugin.volume.routing.debug=true\n"
+      "oneg4.panel.plugin.volume.persistence.debug=true\n"
+      "oneg4.panel.plugin.volume.pipewire.debug=true\n"));
+#endif
+
+#ifdef ONEG4_VOLUME_ENABLE_BLUETOOTH_BATTERY
+  qCDebug(lcVolumeBluetooth) << "OneG4Volume: Bluetooth battery integration enabled";
+#else
+  qCDebug(lcVolumeBluetooth) << "OneG4Volume: Bluetooth battery integration disabled";
+#endif
 
   connect(m_volumeButton, &VolumeButton::mixerRequested, this, &OneG4Volume::openMixer);
 
@@ -104,6 +124,11 @@ void OneG4Volume::settingsChanged() {
       engine = new PulseAudioEngine(this);
 #endif
     }
+#ifdef ONEG4_VOLUME_DEV_TEST_BACKENDS
+    else if (engineName == QLatin1String("TestBackend")) {
+      engine = new TestAudioEngine(this);
+    }
+#endif
     if (!engine) {
       // fallback to first available backend
 #ifdef USE_PULSEAUDIO
