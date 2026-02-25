@@ -50,6 +50,7 @@ PipeWireEngine::PipeWireEngine(QObject* parent)
   m_threadLoop = pw_thread_loop_new("oneg4-volume", nullptr);
   if (!m_threadLoop) {
     qCWarning(lcVolumeBackend) << "PipeWireEngine: unable to create thread loop";
+    setBackendHealth(BackendHealthState::Unavailable, QStringLiteral("PipeWire thread loop creation failed"));
     return;
   }
 
@@ -58,6 +59,7 @@ PipeWireEngine::PipeWireEngine(QObject* parent)
   m_context = pw_context_new(pw_thread_loop_get_loop(m_threadLoop), nullptr, 0);
   if (!m_context) {
     qCWarning(lcVolumeBackend) << "PipeWireEngine: unable to create context";
+    setBackendHealth(BackendHealthState::Unavailable, QStringLiteral("PipeWire context creation failed"));
     pw_thread_loop_unlock(m_threadLoop);
     pw_thread_loop_destroy(m_threadLoop);
     m_threadLoop = nullptr;
@@ -66,6 +68,7 @@ PipeWireEngine::PipeWireEngine(QObject* parent)
 
   if (pw_thread_loop_start(m_threadLoop) < 0) {
     qCWarning(lcVolumeBackend) << "PipeWireEngine: unable to start thread loop";
+    setBackendHealth(BackendHealthState::Unavailable, QStringLiteral("PipeWire thread loop start failed"));
     pw_context_destroy(m_context);
     m_context = nullptr;
     pw_thread_loop_unlock(m_threadLoop);
@@ -160,6 +163,7 @@ void PipeWireEngine::connectContext() {
     return;
 
   m_connecting = true;
+  setBackendHealth(BackendHealthState::Reconnecting, QStringLiteral("Connecting to PipeWire"));
   setReady(false);
 
   pw_thread_loop_lock(m_threadLoop);
@@ -167,6 +171,8 @@ void PipeWireEngine::connectContext() {
   m_core = pw_context_connect(m_context, nullptr, 0);
   if (!m_core) {
     qCWarning(lcVolumeBackend) << "PipeWireEngine: failed to connect to PipeWire core";
+    setBackendHealth(BackendHealthState::Reconnecting,
+                     QStringLiteral("PipeWire core unavailable, retry scheduled"));
     pw_thread_loop_unlock(m_threadLoop);
     m_connecting = false;
     m_reconnectionTimer.start();
@@ -192,6 +198,7 @@ void PipeWireEngine::connectContext() {
   m_registry = pw_core_get_registry(m_core, PW_VERSION_REGISTRY, 0);
   if (!m_registry) {
     qCWarning(lcVolumeBackend) << "PipeWireEngine: failed to get registry";
+    setBackendHealth(BackendHealthState::Reconnecting, QStringLiteral("PipeWire registry unavailable, retry scheduled"));
     pw_thread_loop_unlock(m_threadLoop);
     m_connecting = false;
     m_reconnectionTimer.start();
@@ -247,6 +254,7 @@ void PipeWireEngine::disconnectContext() {
 }
 
 void PipeWireEngine::reconnect() {
+  recordReconnectAttempt(QStringLiteral("Reconnecting to PipeWire"));
   disconnectContext();
   connectContext();
 }
@@ -256,6 +264,15 @@ void PipeWireEngine::setReady(bool ready) {
     return;
 
   m_ready = ready;
+  if (m_ready) {
+    setBackendHealth(BackendHealthState::Ready, QString());
+  }
+  else if (m_connecting || m_reconnectionTimer.isActive()) {
+    setBackendHealth(BackendHealthState::Reconnecting, QStringLiteral("Waiting for PipeWire backend"));
+  }
+  else {
+    setBackendHealth(BackendHealthState::Unavailable, QStringLiteral("PipeWire backend unavailable"));
+  }
   emit contextStateChanged(m_ready);
   emit readyChanged(m_ready);
 }
@@ -263,6 +280,7 @@ void PipeWireEngine::setReady(bool ready) {
 void PipeWireEngine::handleContextStateChanged() {
   if (!m_ready) {
     qCWarning(lcVolumeBackend) << "PipeWireEngine: context not ready, scheduling reconnect";
+    setBackendHealth(BackendHealthState::Reconnecting, QStringLiteral("Context not ready, scheduling reconnect"));
     m_reconnectionTimer.start();
   }
 }
@@ -277,14 +295,17 @@ void PipeWireEngine::onCoreError(void* data, uint32_t id, int seq, int res, cons
   if (!engine) {
     return;
   }
-  qCWarning(lcVolumeBackend) << "PipeWireEngine: core error" << message;
+  const QString errorMessage = QString::fromUtf8(message ? message : "unknown");
+  qCWarning(lcVolumeBackend) << "PipeWireEngine: core error" << errorMessage;
   QPointer<PipeWireEngine> enginePtr(engine);
   QMetaObject::invokeMethod(
       engine,
-      [enginePtr]() {
+      [enginePtr, errorMessage]() {
         if (!enginePtr) {
           return;
         }
+        enginePtr->setBackendHealth(AudioEngine::BackendHealthState::Reconnecting,
+                                    QStringLiteral("PipeWire core error: %1").arg(errorMessage));
         enginePtr->setReady(false);
       },
       Qt::QueuedConnection);
@@ -793,16 +814,16 @@ void PipeWireEngine::queryNodeVolume(uint32_t nodeId) {
   pw_thread_loop_unlock(m_threadLoop);
 }
 
-void PipeWireEngine::setNodeVolume(uint32_t nodeId, float volume) {
+bool PipeWireEngine::setNodeVolume(uint32_t nodeId, float volume) {
   if (!m_threadLoop)
-    return;
+    return false;
 
   pw_thread_loop_lock(m_threadLoop);
 
   pw_node* node = m_nodeByNodeId.value(nodeId, nullptr);
   if (!node) {
     pw_thread_loop_unlock(m_threadLoop);
-    return;
+    return false;
   }
 
   volume = std::clamp(volume, 0.0f, 1.0f);
@@ -817,6 +838,7 @@ void PipeWireEngine::setNodeVolume(uint32_t nodeId, float volume) {
   spa_pod_builder_float(&builder, volume);
   spa_pod* param = reinterpret_cast<spa_pod*>(spa_pod_builder_pop(&builder, &frame));
 
+  bool success = false;
   if (param) {
     int res = pw_node_set_param(node, SPA_PARAM_Props, 0, param);
     if (res < 0) {
@@ -837,22 +859,24 @@ void PipeWireEngine::setNodeVolume(uint32_t nodeId, float volume) {
                                 << (isBluetooth ? "[Bluetooth]" : "") << "to" << volume;
       qCDebug(lcVolumeRouting) << "PipeWireEngine: routed volume update to node" << nodeId << "device" << devName
                                << "volume" << volume;
+      success = true;
     }
   }
 
   pw_thread_loop_unlock(m_threadLoop);
+  return success;
 }
 
-void PipeWireEngine::setNodeMute(uint32_t nodeId, bool mute) {
+bool PipeWireEngine::setNodeMute(uint32_t nodeId, bool mute) {
   if (!m_threadLoop)
-    return;
+    return false;
 
   pw_thread_loop_lock(m_threadLoop);
 
   pw_node* node = m_nodeByNodeId.value(nodeId, nullptr);
   if (!node) {
     pw_thread_loop_unlock(m_threadLoop);
-    return;
+    return false;
   }
 
   uint8_t buffer[1024];
@@ -865,6 +889,7 @@ void PipeWireEngine::setNodeMute(uint32_t nodeId, bool mute) {
   spa_pod_builder_bool(&builder, mute);
   spa_pod* param = reinterpret_cast<spa_pod*>(spa_pod_builder_pop(&builder, &frame));
 
+  bool success = false;
   if (param) {
     int res = pw_node_set_param(node, SPA_PARAM_Props, 0, param);
     if (res < 0) {
@@ -891,10 +916,12 @@ void PipeWireEngine::setNodeMute(uint32_t nodeId, bool mute) {
         qCDebug(lcVolumeRouting) << "PipeWireEngine: applied mute update for node" << nodeId << "device" << devName
                                  << "mute" << mute;
       }
+      success = true;
     }
   }
 
   pw_thread_loop_unlock(m_threadLoop);
+  return success;
 }
 
 bool PipeWireEngine::setNodeDisabledMetadata(uint32_t nodeId, bool disabled) {
@@ -925,13 +952,13 @@ void PipeWireEngine::setNodeEnabledState(AudioDevice* dev, bool enabled) {
   dev->setEnabled(enabled);
 }
 
-void PipeWireEngine::commitDeviceVolume(AudioDevice* device) {
+bool PipeWireEngine::commitDeviceVolume(AudioDevice* device) {
   if (!device || !m_ready || !m_threadLoop)
-    return;
+    return false;
 
   uint32_t nodeId = m_nodeIdByDevice.value(device, SPA_ID_INVALID);
   if (nodeId == SPA_ID_INVALID)
-    return;
+    return false;
 
   int percent = device->volume();
   if (percent < 0)
@@ -957,16 +984,16 @@ void PipeWireEngine::commitDeviceVolume(AudioDevice* device) {
                              << percent;
   }
 
-  setNodeVolume(nodeId, volume);
+  return setNodeVolume(nodeId, volume);
 }
 
-void PipeWireEngine::setMute(AudioDevice* device, bool state) {
+bool PipeWireEngine::setMute(AudioDevice* device, bool state) {
   if (!device || !m_ready || !m_threadLoop)
-    return;
+    return false;
 
   uint32_t nodeId = m_nodeIdByDevice.value(device, SPA_ID_INVALID);
   if (nodeId == SPA_ID_INVALID)
-    return;
+    return false;
 
   const QString devName = device->name();
   const bool isBluetooth = devName.contains(QLatin1String("bluez"), Qt::CaseInsensitive);
@@ -981,7 +1008,7 @@ void PipeWireEngine::setMute(AudioDevice* device, bool state) {
                              << state;
   }
 
-  setNodeMute(nodeId, state);
+  return setNodeMute(nodeId, state);
 }
 
 void PipeWireEngine::setIgnoreMaxVolume(bool ignore) {

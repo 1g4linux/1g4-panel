@@ -18,8 +18,8 @@ class TestAudioEngine : public AudioEngine {
   int volumeMax(AudioDevice* device) const override;
 
  public slots:
-  void commitDeviceVolume(AudioDevice* device) override;
-  void setMute(AudioDevice* device, bool state) override;
+  bool commitDeviceVolume(AudioDevice* device) override;
+  bool setMute(AudioDevice* device, bool state) override;
 };
 
 #endif  // TESTAUDIOENGINE_H

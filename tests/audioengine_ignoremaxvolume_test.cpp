@@ -18,8 +18,8 @@ class DummyAudioEngine : public AudioEngine {
     return QStringLiteral("dummy");
   }
 
-  void commitDeviceVolume(AudioDevice* /*device*/) override {}
-  void setMute(AudioDevice* /*device*/, bool /*state*/) override {}
+  bool commitDeviceVolume(AudioDevice* /*device*/) override { return true; }
+  bool setMute(AudioDevice* /*device*/, bool /*state*/) override { return true; }
 
   bool ignoreMaxVolumeFlag() const {
     return m_ignoreMaxVolume;

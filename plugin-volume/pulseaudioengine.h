@@ -49,9 +49,9 @@ class PulseAudioEngine : public AudioEngine {
   pa_threaded_mainloop* mainloop() const { return m_mainLoop; }
 
  public slots:
-  void commitDeviceVolume(AudioDevice* device);
+  bool commitDeviceVolume(AudioDevice* device) override;
   void retrieveSinkInfo(uint32_t idx);
-  void setMute(AudioDevice* device, bool state);
+  bool setMute(AudioDevice* device, bool state) override;
   void setContextState(pa_context_state_t state);
   void setIgnoreMaxVolume(bool ignore);
 

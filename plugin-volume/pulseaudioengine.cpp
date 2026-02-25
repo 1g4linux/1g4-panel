@@ -330,9 +330,9 @@ void PulseAudioEngine::requestSinkInfoUpdate(uint32_t idx) {
   emit sinkInfoChanged(idx);
 }
 
-void PulseAudioEngine::commitDeviceVolume(AudioDevice* device) {
+bool PulseAudioEngine::commitDeviceVolume(AudioDevice* device) {
   if (!device || !m_ready || !m_mainLoop || !m_context || isShuttingDown())
-    return;
+    return false;
 
   // convert from percentage to real volume value
   const auto v = static_cast<pa_volume_t>((static_cast<double>(device->volume()) / 100.0) * m_maximumVolume);
@@ -348,13 +348,16 @@ void PulseAudioEngine::commitDeviceVolume(AudioDevice* device) {
   else
     operation = pa_context_set_source_volume_by_index(m_context, device->index(), volume, contextSuccessCallback, this);
 
+  bool success = false;
   if (operation) {
     while (pa_operation_get_state(operation) == PA_OPERATION_RUNNING)
       pa_threaded_mainloop_wait(m_mainLoop);
+    success = true;
     pa_operation_unref(operation);
   }
 
   pa_threaded_mainloop_unlock(m_mainLoop);
+  return success;
 }
 
 void PulseAudioEngine::retrieveSinks() {
@@ -507,21 +510,24 @@ void PulseAudioEngine::retrieveSinkInfo(uint32_t idx) {
   pa_threaded_mainloop_unlock(m_mainLoop);
 }
 
-void PulseAudioEngine::setMute(AudioDevice* device, bool state) {
+bool PulseAudioEngine::setMute(AudioDevice* device, bool state) {
   if (!m_ready || !device || !m_mainLoop || !m_context || isShuttingDown())
-    return;
+    return false;
 
   pa_threaded_mainloop_lock(m_mainLoop);
 
   pa_operation* operation =
       pa_context_set_sink_mute_by_index(m_context, device->index(), state, contextSuccessCallback, this);
+  bool success = false;
   if (operation) {
     while (pa_operation_get_state(operation) == PA_OPERATION_RUNNING)
       pa_threaded_mainloop_wait(m_mainLoop);
+    success = true;
     pa_operation_unref(operation);
   }
 
   pa_threaded_mainloop_unlock(m_mainLoop);
+  return success;
 }
 
 void PulseAudioEngine::setContextState(pa_context_state_t state) {

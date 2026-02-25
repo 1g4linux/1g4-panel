@@ -20,18 +20,20 @@ int TestAudioEngine::volumeMax(AudioDevice* device) const {
   return device ? 100 : 0;
 }
 
-void TestAudioEngine::commitDeviceVolume(AudioDevice* device) {
+bool TestAudioEngine::commitDeviceVolume(AudioDevice* device) {
   if (!device) {
-    return;
+    return false;
   }
 
   device->setVolumeNoCommit(volumeBounded(device->volume(), device));
+  return true;
 }
 
-void TestAudioEngine::setMute(AudioDevice* device, bool state) {
+bool TestAudioEngine::setMute(AudioDevice* device, bool state) {
   if (!device) {
-    return;
+    return false;
   }
 
   device->setMuteNoCommit(state);
+  return true;
 }

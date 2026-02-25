@@ -34,8 +34,8 @@ class PipeWireEngine : public AudioEngine {
   bool deviceIsEnabled(AudioDevice* device) const override;
 
  public slots:
-  void commitDeviceVolume(AudioDevice* device) override;
-  void setMute(AudioDevice* device, bool state) override;
+  bool commitDeviceVolume(AudioDevice* device) override;
+  bool setMute(AudioDevice* device, bool state) override;
   void setIgnoreMaxVolume(bool ignore) override;
 
  signals:
@@ -98,8 +98,8 @@ class PipeWireEngine : public AudioEngine {
   void applyNodeDisabledUpdate(uint32_t nodeId, bool disabled);
 
   void queryNodeVolume(uint32_t nodeId);
-  void setNodeVolume(uint32_t nodeId, float volume);
-  void setNodeMute(uint32_t nodeId, bool mute);
+  bool setNodeVolume(uint32_t nodeId, float volume);
+  bool setNodeMute(uint32_t nodeId, bool mute);
   bool setNodeDisabledMetadata(uint32_t nodeId, bool disabled);
   void setNodeEnabledState(AudioDevice* dev, bool enabled);
 

@@ -7,7 +7,18 @@ class SnapshotDummyEngine : public AudioEngine {
   Q_OBJECT
 
  public:
-  explicit SnapshotDummyEngine(QObject* parent = nullptr) : AudioEngine(parent) {}
+  explicit SnapshotDummyEngine(QObject* parent = nullptr)
+      : AudioEngine(parent),
+        m_capabilities{
+            false,
+            false,
+            false,
+            false,
+        },
+        m_commitVolumeSucceeds(true),
+        m_commitMuteSucceeds(true),
+        m_autoAcknowledgeVolumeCommit(false),
+        m_autoAcknowledgeMuteCommit(false) {}
 
   int volumeMax(AudioDevice* /*device*/) const override {
     return 100;
@@ -17,8 +28,29 @@ class SnapshotDummyEngine : public AudioEngine {
     return QStringLiteral("snapshot-dummy");
   }
 
-  void commitDeviceVolume(AudioDevice* /*device*/) override {}
-  void setMute(AudioDevice* /*device*/, bool /*state*/) override {}
+  BackendCapabilities backendCapabilities() const override {
+    return m_capabilities;
+  }
+
+  bool commitDeviceVolume(AudioDevice* device) override {
+    if (!m_commitVolumeSucceeds || !device) {
+      return false;
+    }
+    if (m_autoAcknowledgeVolumeCommit) {
+      device->setVolumeNoCommit(device->volume());
+    }
+    return true;
+  }
+
+  bool setMute(AudioDevice* device, bool state) override {
+    if (!m_commitMuteSucceeds || !device) {
+      return false;
+    }
+    if (m_autoAcknowledgeMuteCommit) {
+      device->setMuteNoCommit(state);
+    }
+    return true;
+  }
 
   AudioDevice* addSink(const QString& name,
                        const QString& description,
@@ -36,6 +68,53 @@ class SnapshotDummyEngine : public AudioEngine {
     m_sinks.append(sink);
     return sink;
   }
+
+  void setCapabilities(bool profileSwitching, bool streamMove, bool battery, bool perPortSelection) {
+    m_capabilities = BackendCapabilities{
+        profileSwitching,
+        streamMove,
+        battery,
+        perPortSelection,
+    };
+  }
+
+  void setCommitBehavior(bool volumeSucceeds, bool muteSucceeds) {
+    m_commitVolumeSucceeds = volumeSucceeds;
+    m_commitMuteSucceeds = muteSucceeds;
+  }
+
+  void setAutoAcknowledge(bool volumeAutoAck, bool muteAutoAck) {
+    m_autoAcknowledgeVolumeCommit = volumeAutoAck;
+    m_autoAcknowledgeMuteCommit = muteAutoAck;
+  }
+
+  void removeSink(AudioDevice* sink) {
+    if (!sink) {
+      return;
+    }
+    m_sinks.removeAll(sink);
+    delete sink;
+    emit sinkListChanged();
+  }
+
+  void emitSinkListChangedForTest() {
+    emit sinkListChanged();
+  }
+
+  void setBackendHealthForTest(BackendHealthState state, const QString& message) {
+    setBackendHealth(state, message);
+  }
+
+  void recordReconnectAttemptForTest(const QString& message) {
+    recordReconnectAttempt(message);
+  }
+
+ private:
+  BackendCapabilities m_capabilities;
+  bool m_commitVolumeSucceeds;
+  bool m_commitMuteSucceeds;
+  bool m_autoAcknowledgeVolumeCommit;
+  bool m_autoAcknowledgeMuteCommit;
 };
 
 class AudioEngineSnapshotTest : public QObject {
@@ -44,6 +123,16 @@ class AudioEngineSnapshotTest : public QObject {
  private slots:
   void snapshotIsDetachedFromMutableDeviceState();
   void stableIdDoesNotDependOnRuntimeId();
+  void stateSnapshotSeparatesPhysicalDevicesLogicalEndpointsAndStreams();
+  void stateSnapshotIncludesBackendCapabilitiesFlags();
+  void userVolumeChangeCreatesPendingOperationUntilBackendAcknowledges();
+  void failedUserVolumeChangeRollsBackToPreviousValue();
+  void backendUpdateMarksEndpointChangeSource();
+  void backendControlInterfacesDefaultToUnsupported();
+  void stateChangedSignalSubscribesToDiscoveryUpdates();
+  void volumeCommitRequestRunsAsynchronously();
+  void stateSnapshotTracksBackendHealthAndReconnectAttempts();
+  void removingEndpointClearsStalePendingOperations();
 };
 
 void AudioEngineSnapshotTest::snapshotIsDetachedFromMutableDeviceState() {
@@ -86,6 +175,164 @@ void AudioEngineSnapshotTest::stableIdDoesNotDependOnRuntimeId() {
   QCOMPARE(second.size(), 1);
   QCOMPARE(second.first().runtimeId, 102U);
   QCOMPARE(second.first().stableId, stableIdBefore);
+}
+
+void AudioEngineSnapshotTest::stateSnapshotSeparatesPhysicalDevicesLogicalEndpointsAndStreams() {
+  SnapshotDummyEngine engine;
+  engine.addSink(QStringLiteral("alsa_output.pci-0000_00_1f.3.analog-stereo"), QStringLiteral("Built-in Analog"), 10U,
+                 20, false, 7);
+  engine.addSink(QStringLiteral("alsa_output.pci-0000_00_1f.3.hdmi-stereo"), QStringLiteral("Built-in HDMI"), 11U, 70,
+                 true, 7);
+
+  const AudioEngine::StateSnapshot state = engine.stateSnapshot();
+
+  QCOMPARE(state.physicalDevices.size(), 1);
+  QCOMPARE(state.logicalEndpoints.size(), 2);
+  QVERIFY(state.streams.isEmpty());
+
+  const QString physicalStableId = state.physicalDevices.first().stableId;
+  QVERIFY(!physicalStableId.isEmpty());
+  QCOMPARE(state.physicalDevices.first().cardId, 7);
+
+  for (const AudioEngine::LogicalEndpointSnapshot& endpoint : state.logicalEndpoints) {
+    QCOMPARE(endpoint.physicalDeviceStableId, physicalStableId);
+    QCOMPARE(endpoint.direction, AudioEngine::EndpointDirection::Output);
+  }
+}
+
+void AudioEngineSnapshotTest::stateSnapshotIncludesBackendCapabilitiesFlags() {
+  SnapshotDummyEngine engine;
+  engine.setCapabilities(true, false, true, false);
+
+  const AudioEngine::StateSnapshot state = engine.stateSnapshot();
+  QCOMPARE(state.capabilities.profileSwitchingSupported, true);
+  QCOMPARE(state.capabilities.streamMoveSupported, false);
+  QCOMPARE(state.capabilities.batteryAvailable, true);
+  QCOMPARE(state.capabilities.perPortSelectionSupported, false);
+}
+
+void AudioEngineSnapshotTest::userVolumeChangeCreatesPendingOperationUntilBackendAcknowledges() {
+  SnapshotDummyEngine engine;
+  engine.setCommitBehavior(true, true);
+  engine.setAutoAcknowledge(false, false);
+  AudioDevice* sink = engine.addSink(QStringLiteral("alsa_output.test"), QStringLiteral("Test Sink"), 1U, 20, false, 1);
+
+  sink->setVolume(63);
+
+  AudioEngine::StateSnapshot state = engine.stateSnapshot();
+  QCOMPARE(state.pendingOperations.size(), 1);
+  const AudioEngine::PendingOperationSnapshot pending = state.pendingOperations.first();
+  QCOMPARE(pending.kind, AudioEngine::PendingOperationKind::SetVolume);
+  QCOMPARE(pending.previousVolumePercent, 20);
+  QCOMPARE(pending.targetVolumePercent, 63);
+
+  QCOMPARE(state.logicalEndpoints.size(), 1);
+  QCOMPARE(state.logicalEndpoints.first().lastChangeSource, AudioEngine::ChangeSource::UserAction);
+
+  sink->setVolumeNoCommit(63);
+
+  state = engine.stateSnapshot();
+  QVERIFY(state.pendingOperations.isEmpty());
+}
+
+void AudioEngineSnapshotTest::failedUserVolumeChangeRollsBackToPreviousValue() {
+  SnapshotDummyEngine engine;
+  engine.setCommitBehavior(false, true);
+  AudioDevice* sink = engine.addSink(QStringLiteral("alsa_output.test"), QStringLiteral("Test Sink"), 2U, 15, false, 1);
+
+  sink->setVolume(80);
+  QCoreApplication::processEvents();
+
+  QCOMPARE(sink->volume(), 15);
+  const AudioEngine::StateSnapshot state = engine.stateSnapshot();
+  QVERIFY(state.pendingOperations.isEmpty());
+  QCOMPARE(state.logicalEndpoints.size(), 1);
+  QCOMPARE(state.logicalEndpoints.first().lastChangeSource, AudioEngine::ChangeSource::Rollback);
+}
+
+void AudioEngineSnapshotTest::backendUpdateMarksEndpointChangeSource() {
+  SnapshotDummyEngine engine;
+  AudioDevice* sink = engine.addSink(QStringLiteral("alsa_output.test"), QStringLiteral("Test Sink"), 3U, 35, false, 1);
+
+  sink->setVolumeNoCommit(44);
+
+  const AudioEngine::StateSnapshot state = engine.stateSnapshot();
+  QCOMPARE(state.logicalEndpoints.size(), 1);
+  QCOMPARE(state.logicalEndpoints.first().volumePercent, 44);
+  QCOMPARE(state.logicalEndpoints.first().lastChangeSource, AudioEngine::ChangeSource::BackendEvent);
+}
+
+void AudioEngineSnapshotTest::backendControlInterfacesDefaultToUnsupported() {
+  SnapshotDummyEngine engine;
+
+  QVERIFY(!engine.setDefaultOutputDevice(QStringLiteral("endpoint-a")));
+  QVERIFY(!engine.setDefaultInputDevice(QStringLiteral("endpoint-b")));
+  QVERIFY(!engine.movePlaybackStreamToOutput(QStringLiteral("stream-1"), QStringLiteral("endpoint-a")));
+  QVERIFY(!engine.moveRecordingStreamToInput(QStringLiteral("stream-2"), QStringLiteral("endpoint-b")));
+  QVERIFY(!engine.setPhysicalDeviceProfile(QStringLiteral("physical-1"), QStringLiteral("a2dp")));
+  QVERIFY(engine.persistenceHints().isEmpty());
+}
+
+void AudioEngineSnapshotTest::stateChangedSignalSubscribesToDiscoveryUpdates() {
+  SnapshotDummyEngine engine;
+  QSignalSpy stateChangedSpy(&engine, &AudioEngine::stateChanged);
+
+  engine.emitSinkListChangedForTest();
+
+  QCOMPARE(stateChangedSpy.count(), 1);
+}
+
+void AudioEngineSnapshotTest::volumeCommitRequestRunsAsynchronously() {
+  SnapshotDummyEngine engine;
+  engine.setCommitBehavior(false, true);
+  AudioDevice* sink =
+      engine.addSink(QStringLiteral("alsa_output.async"), QStringLiteral("Async Sink"), 4U, 25, false, 1);
+
+  sink->setVolume(77);
+
+  QCOMPARE(sink->volume(), 77);
+  QCOMPARE(engine.stateSnapshot().pendingOperations.size(), 1);
+
+  QCoreApplication::processEvents();
+
+  QCOMPARE(sink->volume(), 25);
+  QVERIFY(engine.stateSnapshot().pendingOperations.isEmpty());
+}
+
+void AudioEngineSnapshotTest::stateSnapshotTracksBackendHealthAndReconnectAttempts() {
+  SnapshotDummyEngine engine;
+
+  engine.setBackendHealthForTest(AudioEngine::BackendHealthState::Reconnecting, QStringLiteral("initial reconnect"));
+  engine.recordReconnectAttemptForTest(QStringLiteral("retry #1"));
+  engine.recordReconnectAttemptForTest(QStringLiteral("retry #2"));
+
+  AudioEngine::StateSnapshot state = engine.stateSnapshot();
+  QCOMPARE(state.backendHealth.state, AudioEngine::BackendHealthState::Reconnecting);
+  QCOMPARE(state.backendHealth.reconnectAttempts, 2U);
+  QCOMPARE(state.backendHealth.message, QStringLiteral("retry #2"));
+
+  engine.setBackendHealthForTest(AudioEngine::BackendHealthState::Ready, QString());
+  state = engine.stateSnapshot();
+  QCOMPARE(state.backendHealth.state, AudioEngine::BackendHealthState::Ready);
+  QCOMPARE(state.backendHealth.reconnectAttempts, 2U);
+}
+
+void AudioEngineSnapshotTest::removingEndpointClearsStalePendingOperations() {
+  SnapshotDummyEngine engine;
+  engine.setCommitBehavior(true, true);
+  engine.setAutoAcknowledge(false, false);
+  AudioDevice* sink =
+      engine.addSink(QStringLiteral("alsa_output.stale"), QStringLiteral("Stale Sink"), 5U, 30, false, 1);
+
+  sink->setVolume(65);
+  QCOMPARE(engine.stateSnapshot().pendingOperations.size(), 1);
+
+  engine.removeSink(sink);
+  QCoreApplication::processEvents();
+
+  const AudioEngine::StateSnapshot state = engine.stateSnapshot();
+  QVERIFY(state.pendingOperations.isEmpty());
+  QVERIFY(state.logicalEndpoints.isEmpty());
 }
 
 QTEST_MAIN(AudioEngineSnapshotTest)
