@@ -280,6 +280,7 @@ void AudioEngine::beginPendingVolumeOperation(AudioDevice* device, int previousV
   }
 
   const QString endpointStableId = makeEndpointStableId(*device);
+  const QString key = pendingOperationKey(endpointStableId, PendingOperationKind::SetVolume);
   PendingOperationSnapshot pending;
   pending.operationId = pendingOperationId(PendingOperationKind::SetVolume, ++m_nextPendingOperationId);
   pending.endpointStableId = endpointStableId;
@@ -289,7 +290,14 @@ void AudioEngine::beginPendingVolumeOperation(AudioDevice* device, int previousV
   pending.previousMuted = device->mute();
   pending.targetMuted = device->mute();
 
-  m_pendingOperationsByKey.insert(pendingOperationKey(endpointStableId, PendingOperationKind::SetVolume), pending);
+  const auto existingIt = m_pendingOperationsByKey.constFind(key);
+  if (existingIt != m_pendingOperationsByKey.cend()) {
+    // Preserve the pre-burst rollback baseline while the endpoint still has an unresolved pending operation.
+    pending.previousVolumePercent = existingIt->previousVolumePercent;
+    pending.previousMuted = existingIt->previousMuted;
+  }
+
+  m_pendingOperationsByKey.insert(key, pending);
   m_lastChangeSourceByEndpoint.insert(endpointStableId, ChangeSource::UserAction);
   queueStateChangedByObjectAndType(endpointStableId, CoalescedStateEventType::EndpointState);
 }
@@ -300,6 +308,7 @@ void AudioEngine::beginPendingMuteOperation(AudioDevice* device, bool previousMu
   }
 
   const QString endpointStableId = makeEndpointStableId(*device);
+  const QString key = pendingOperationKey(endpointStableId, PendingOperationKind::SetMute);
   PendingOperationSnapshot pending;
   pending.operationId = pendingOperationId(PendingOperationKind::SetMute, ++m_nextPendingOperationId);
   pending.endpointStableId = endpointStableId;
@@ -309,7 +318,14 @@ void AudioEngine::beginPendingMuteOperation(AudioDevice* device, bool previousMu
   pending.previousMuted = previousMuted;
   pending.targetMuted = targetMuted;
 
-  m_pendingOperationsByKey.insert(pendingOperationKey(endpointStableId, PendingOperationKind::SetMute), pending);
+  const auto existingIt = m_pendingOperationsByKey.constFind(key);
+  if (existingIt != m_pendingOperationsByKey.cend()) {
+    // Preserve the pre-burst rollback baseline while the endpoint still has an unresolved pending operation.
+    pending.previousVolumePercent = existingIt->previousVolumePercent;
+    pending.previousMuted = existingIt->previousMuted;
+  }
+
+  m_pendingOperationsByKey.insert(key, pending);
   m_lastChangeSourceByEndpoint.insert(endpointStableId, ChangeSource::UserAction);
   queueStateChangedByObjectAndType(endpointStableId, CoalescedStateEventType::EndpointState);
 }

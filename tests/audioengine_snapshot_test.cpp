@@ -134,6 +134,8 @@ class AudioEngineSnapshotTest : public QObject {
   void stateChangedSignalCoalescesEndpointBurstByKeyAndType();
   void stateChangedSignalCoalescesBackendHealthBurstByKeyAndType();
   void volumeCommitRequestRunsAsynchronously();
+  void rapidVolumeBurstFailureRollsBackToPreBurstValue();
+  void rapidMuteBurstFailureRollsBackToPreBurstValue();
   void stateSnapshotTracksBackendHealthAndReconnectAttempts();
   void removingEndpointClearsStalePendingOperations();
 };
@@ -350,6 +352,42 @@ void AudioEngineSnapshotTest::volumeCommitRequestRunsAsynchronously() {
 
   QCOMPARE(sink->volume(), 25);
   QVERIFY(engine.stateSnapshot().pendingOperations.isEmpty());
+}
+
+void AudioEngineSnapshotTest::rapidVolumeBurstFailureRollsBackToPreBurstValue() {
+  SnapshotDummyEngine engine;
+  engine.setCommitBehavior(false, true);
+  AudioDevice* sink =
+      engine.addSink(QStringLiteral("alsa_output.burst-volume"), QStringLiteral("Burst Volume Sink"), 6U, 20, false, 1);
+
+  sink->setVolume(35);
+  sink->setVolume(80);
+
+  QCoreApplication::processEvents();
+
+  QCOMPARE(sink->volume(), 20);
+  const AudioEngine::StateSnapshot state = engine.stateSnapshot();
+  QVERIFY(state.pendingOperations.isEmpty());
+  QCOMPARE(state.logicalEndpoints.size(), 1);
+  QCOMPARE(state.logicalEndpoints.first().lastChangeSource, AudioEngine::ChangeSource::Rollback);
+}
+
+void AudioEngineSnapshotTest::rapidMuteBurstFailureRollsBackToPreBurstValue() {
+  SnapshotDummyEngine engine;
+  engine.setCommitBehavior(true, false);
+  AudioDevice* sink =
+      engine.addSink(QStringLiteral("alsa_output.burst-mute"), QStringLiteral("Burst Mute Sink"), 7U, 45, false, 1);
+
+  sink->setMute(true);
+  sink->setMute(false);
+
+  QCoreApplication::processEvents();
+
+  QCOMPARE(sink->mute(), false);
+  const AudioEngine::StateSnapshot state = engine.stateSnapshot();
+  QVERIFY(state.pendingOperations.isEmpty());
+  QCOMPARE(state.logicalEndpoints.size(), 1);
+  QCOMPARE(state.logicalEndpoints.first().lastChangeSource, AudioEngine::ChangeSource::Rollback);
 }
 
 void AudioEngineSnapshotTest::stateSnapshotTracksBackendHealthAndReconnectAttempts() {
