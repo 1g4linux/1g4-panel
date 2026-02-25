@@ -14,13 +14,9 @@ class VolumePopupDummyEngine : public AudioEngine {
  public:
   explicit VolumePopupDummyEngine(QObject* parent = nullptr) : AudioEngine(parent) {}
 
-  int volumeMax(AudioDevice* /*device*/) const override {
-    return 100;
-  }
+  int volumeMax(AudioDevice* /*device*/) const override { return 100; }
 
-  const QString backendName() const override {
-    return QStringLiteral("volumepopup-dummy");
-  }
+  const QString backendName() const override { return QStringLiteral("volumepopup-dummy"); }
 
   AudioDevice* addSink(const QString& name, int initialVolume) {
     auto* sink = new AudioDevice(Sink, this, this);
@@ -67,6 +63,7 @@ class VolumePopupDragTest : public QObject {
   void userMuteToggleUpdatesOutputDeviceMuteState();
   void userInputVolumeSliderChangeUpdatesInputDeviceVolume();
   void userInputMuteToggleUpdatesInputDeviceMuteState();
+  void tooltipsIncludeDefaultEndpointNamesAndActiveState();
   void outputStockIconTracksMutedLowMediumHighStates();
   void backendVolumeUpdatesDoNotMoveSliderWhileDragging();
   void staleDeferredBackendVolumeIsDiscardedAfterFurtherDrag();
@@ -91,7 +88,7 @@ void VolumePopupDragTest::userVolumeSliderChangeUpdatesOutputDeviceVolume() {
   slider->setValue(72);
 
   QCOMPARE(sink->volume(), 72);
-  QCOMPARE(slider->toolTip(), QStringLiteral("72%"));
+  QCOMPARE(slider->toolTip(), QStringLiteral("Output: alsa_output.popup-user-volume (active), 72%"));
 }
 
 void VolumePopupDragTest::userMuteToggleUpdatesOutputDeviceMuteState() {
@@ -155,6 +152,28 @@ void VolumePopupDragTest::userInputMuteToggleUpdatesInputDeviceMuteState() {
   QCOMPARE(source->mute(), false);
 }
 
+void VolumePopupDragTest::tooltipsIncludeDefaultEndpointNamesAndActiveState() {
+  VolumePopupDummyEngine engine;
+  AudioDevice* sink = engine.addSink(QStringLiteral("alsa_output.popup-tooltip-output"), 33);
+  AudioDevice* source = engine.addSource(QStringLiteral("alsa_input.popup-tooltip-input"), 44);
+  QVERIFY(sink != nullptr);
+  QVERIFY(source != nullptr);
+  sink->setDescription(QStringLiteral("Desk Speakers"));
+  source->setDescription(QStringLiteral("Desk Microphone"));
+
+  VolumePopup popup;
+  popup.setDevice(sink);
+  popup.setInputDevice(source);
+
+  QSlider* outputSlider = popup.volumeSlider();
+  QSlider* inputSlider = popup.inputVolumeSlider();
+  QVERIFY(outputSlider != nullptr);
+  QVERIFY(inputSlider != nullptr);
+
+  QCOMPARE(outputSlider->toolTip(), QStringLiteral("Output: Desk Speakers (active), 33%"));
+  QCOMPARE(inputSlider->toolTip(), QStringLiteral("Input: Desk Microphone (active), 44%"));
+}
+
 void VolumePopupDragTest::outputStockIconTracksMutedLowMediumHighStates() {
   VolumePopupDummyEngine engine;
   AudioDevice* sink = engine.addSink(QStringLiteral("alsa_output.popup-icon-states"), 10);
@@ -210,7 +229,7 @@ void VolumePopupDragTest::backendVolumeUpdatesDoNotMoveSliderWhileDragging() {
 
   slider->setSliderDown(false);
   QCOMPARE(slider->value(), 40);
-  QCOMPARE(slider->toolTip(), QStringLiteral("40%"));
+  QCOMPARE(slider->toolTip(), QStringLiteral("Output: alsa_output.popup-drag (active), 40%"));
 }
 
 void VolumePopupDragTest::staleDeferredBackendVolumeIsDiscardedAfterFurtherDrag() {
@@ -286,7 +305,7 @@ void VolumePopupDragTest::backendRecoveryRestoresInteractiveVolumeState() {
   popup.setBackendAvailable(true, QString());
 
   QCOMPARE(slider->isEnabled(), true);
-  QCOMPARE(slider->toolTip(), QStringLiteral("20%"));
+  QCOMPARE(slider->toolTip(), QStringLiteral("Output: alsa_output.popup-recovery (active), 20%"));
   QVERIFY(!stockIconSpy.isEmpty());
   QCOMPARE(stockIconSpy.last().at(0).toString(), QStringLiteral("audio-volume-low-panel"));
 }

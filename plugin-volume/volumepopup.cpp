@@ -25,6 +25,35 @@
 #include <QWheelEvent>
 #include <QtGlobal>
 
+namespace {
+
+QString tooltipDisplayName(const AudioDevice* device, const QString& fallback) {
+  if (!device) {
+    return fallback;
+  }
+
+  const QString description = device->description().trimmed();
+  if (!description.isEmpty()) {
+    return description;
+  }
+
+  const QString name = device->name().trimmed();
+  if (!name.isEmpty()) {
+    return name;
+  }
+
+  return fallback;
+}
+
+QString tooltipEndpointState(const AudioDevice* device, const QString& active, const QString& inactive) {
+  if (!device) {
+    return inactive;
+  }
+  return device->enabled() ? active : inactive;
+}
+
+}  // namespace
+
 VolumePopup::VolumePopup(QWidget* parent)
     : QDialog(
           parent,
@@ -366,6 +395,9 @@ void VolumePopup::setDevice(AudioDevice* device) {
   if (m_device) {
     disconnect(m_device, &AudioDevice::volumeChanged, this, &VolumePopup::handleDeviceVolumeChanged);
     disconnect(m_device, &AudioDevice::muteChanged, this, &VolumePopup::handleDeviceMuteChanged);
+    disconnect(m_device, &AudioDevice::nameChanged, this, &VolumePopup::updateStatusToolTip);
+    disconnect(m_device, &AudioDevice::descriptionChanged, this, &VolumePopup::updateStatusToolTip);
+    disconnect(m_device, &AudioDevice::enabledChanged, this, &VolumePopup::updateStatusToolTip);
   }
 
   m_device = device;
@@ -378,6 +410,9 @@ void VolumePopup::setDevice(AudioDevice* device) {
     handleDeviceVolumeChanged(dev->volume());
     connect(dev, &AudioDevice::volumeChanged, this, &VolumePopup::handleDeviceVolumeChanged, Qt::QueuedConnection);
     connect(dev, &AudioDevice::muteChanged, this, &VolumePopup::handleDeviceMuteChanged, Qt::QueuedConnection);
+    connect(dev, &AudioDevice::nameChanged, this, &VolumePopup::updateStatusToolTip, Qt::QueuedConnection);
+    connect(dev, &AudioDevice::descriptionChanged, this, &VolumePopup::updateStatusToolTip, Qt::QueuedConnection);
+    connect(dev, &AudioDevice::enabledChanged, this, &VolumePopup::updateStatusToolTip, Qt::QueuedConnection);
   }
   else {
     m_volumeSlider->blockSignals(true);
@@ -401,6 +436,9 @@ void VolumePopup::setInputDevice(AudioDevice* device) {
   if (m_inputDevice) {
     disconnect(m_inputDevice, &AudioDevice::volumeChanged, this, &VolumePopup::handleInputDeviceVolumeChanged);
     disconnect(m_inputDevice, &AudioDevice::muteChanged, this, &VolumePopup::handleInputDeviceMuteChanged);
+    disconnect(m_inputDevice, &AudioDevice::nameChanged, this, &VolumePopup::updateStatusToolTip);
+    disconnect(m_inputDevice, &AudioDevice::descriptionChanged, this, &VolumePopup::updateStatusToolTip);
+    disconnect(m_inputDevice, &AudioDevice::enabledChanged, this, &VolumePopup::updateStatusToolTip);
   }
 
   m_inputDevice = device;
@@ -411,8 +449,12 @@ void VolumePopup::setInputDevice(AudioDevice* device) {
   if (auto* input = m_inputDevice.data()) {
     m_inputMuteToggleButton->setChecked(input->mute());
     handleInputDeviceVolumeChanged(input->volume());
-    connect(input, &AudioDevice::volumeChanged, this, &VolumePopup::handleInputDeviceVolumeChanged, Qt::QueuedConnection);
+    connect(input, &AudioDevice::volumeChanged, this, &VolumePopup::handleInputDeviceVolumeChanged,
+            Qt::QueuedConnection);
     connect(input, &AudioDevice::muteChanged, this, &VolumePopup::handleInputDeviceMuteChanged, Qt::QueuedConnection);
+    connect(input, &AudioDevice::nameChanged, this, &VolumePopup::updateStatusToolTip, Qt::QueuedConnection);
+    connect(input, &AudioDevice::descriptionChanged, this, &VolumePopup::updateStatusToolTip, Qt::QueuedConnection);
+    connect(input, &AudioDevice::enabledChanged, this, &VolumePopup::updateStatusToolTip, Qt::QueuedConnection);
   }
   else {
     m_inputVolumeSlider->blockSignals(true);
@@ -490,11 +532,23 @@ void VolumePopup::updateStatusToolTip() {
     inputTip = outputTip;
   }
   else {
-    outputTip = m_device ? QStringLiteral("%1%").arg(m_volumeSlider->value()) : tr("No audio output device");
+    if (m_device) {
+      const QString outputName = tooltipDisplayName(m_device.data(), tr("Unknown output device"));
+      const QString outputState = tooltipEndpointState(m_device.data(), tr("active"), tr("inactive"));
+      const QString outputPercent = QStringLiteral("%1%").arg(m_volumeSlider->value());
+      outputTip = tr("Output: %1 (%2), %3%4")
+                      .arg(outputName, outputState, outputPercent, m_device->mute() ? tr(" (muted)") : QString());
+    }
+    else {
+      outputTip = tr("No audio output device");
+    }
 
     if (m_inputDevice) {
+      const QString inputName = tooltipDisplayName(m_inputDevice.data(), tr("Unknown microphone input device"));
+      const QString inputState = tooltipEndpointState(m_inputDevice.data(), tr("active"), tr("inactive"));
       const QString inputPercent = QStringLiteral("%1%").arg(m_inputVolumeSlider->value());
-      inputTip = tr("Mic: %1%2").arg(inputPercent, m_inputDevice->mute() ? tr(" (muted)") : QString());
+      inputTip = tr("Input: %1 (%2), %3%4")
+                     .arg(inputName, inputState, inputPercent, m_inputDevice->mute() ? tr(" (muted)") : QString());
     }
     else {
       inputTip = tr("No microphone input device");
@@ -509,9 +563,7 @@ void VolumePopup::updateStatusToolTip() {
     parentTip = outputTip;
   }
   else if (m_device && m_inputDevice) {
-    const QString outputPercent = QStringLiteral("%1%").arg(m_volumeSlider->value());
-    const QString inputPercent = QStringLiteral("%1%").arg(m_inputVolumeSlider->value());
-    parentTip = tr("Output: %1\nMic: %2%3").arg(outputPercent, inputPercent, m_inputDevice->mute() ? tr(" (muted)") : QString());
+    parentTip = tr("%1\n%2").arg(outputTip, inputTip);
   }
   else if (m_inputDevice) {
     parentTip = inputTip;
