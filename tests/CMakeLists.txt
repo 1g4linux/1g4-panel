@@ -68,6 +68,7 @@ add_executable(plugin_volume_configuration_lazy_rebuild_test
     ${CMAKE_SOURCE_DIR}/plugin-volume/audiodevice.cpp
     ${CMAKE_SOURCE_DIR}/panel/pluginsettings.cpp
     ${CMAKE_SOURCE_DIR}/panel/oneg4panelpluginconfigdialog.cpp
+    # oneg4-compat already provides OneG4/Settings.cpp; adding it here trips ASan ODR checks.
 )
 target_include_directories(plugin_volume_configuration_lazy_rebuild_test
     PRIVATE
