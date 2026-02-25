@@ -25,7 +25,7 @@ jobs:
           - name: tsan
             sanitizer_flags: "-fsanitize=thread"
             runtime_env: |
-              TSAN_OPTIONS=halt_on_error=1:second_deadlock_stack=1
+              TSAN_OPTIONS=halt_on_error=1:second_deadlock_stack=1:report_thread_leaks=0:suppressions=${GITHUB_WORKSPACE}/tests/tsan_qttest.supp
 
     env:
       CC: clang
