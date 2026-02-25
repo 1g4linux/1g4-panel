@@ -17,12 +17,11 @@ if(NOT LDD_EXIT_CODE EQUAL 0)
     message(FATAL_ERROR "ldd failed for ${VOLUME_PLUGIN_SO}: ${LDD_ERROR}")
 endif()
 
-foreach(FORBIDDEN_RUNTIME_DEP
+foreach(REQUIRED_RUNTIME_DEP
         "libpulse.so"
-        "libpulse-mainloop-glib.so"
-        "libpulsecommon")
-    string(FIND "${LDD_OUTPUT}" "${FORBIDDEN_RUNTIME_DEP}" FORBIDDEN_RUNTIME_DEP_POS)
-    if(NOT FORBIDDEN_RUNTIME_DEP_POS EQUAL -1)
-        message(FATAL_ERROR "Volume plugin still links PulseAudio runtime dependency: ${FORBIDDEN_RUNTIME_DEP}")
+        "libpulse-mainloop-glib.so")
+    string(FIND "${LDD_OUTPUT}" "${REQUIRED_RUNTIME_DEP}" REQUIRED_RUNTIME_DEP_POS)
+    if(REQUIRED_RUNTIME_DEP_POS EQUAL -1)
+        message(FATAL_ERROR "Built-in mixer runtime dependency is missing from volume plugin linkage: ${REQUIRED_RUNTIME_DEP}")
     endif()
 endforeach()

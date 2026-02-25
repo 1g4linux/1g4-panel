@@ -20,12 +20,19 @@ foreach(FORBIDDEN_PLUGIN_CMAKE_SNIPPET
         "pkg_check_modules(PULSEAUDIO"
         "USE_PULSEAUDIO"
         "pulseaudioengine.cpp"
-        "pulseaudioengine.h"
-        "add_subdirectory(1g4-mixer)"
-        "set(LIBRARIES \${LIBRARIES} 1g4-mixer)")
+        "pulseaudioengine.h")
     string(FIND "${VOLUME_PLUGIN_CMAKE_CONTENT}" "${FORBIDDEN_PLUGIN_CMAKE_SNIPPET}" FORBIDDEN_PLUGIN_CMAKE_POS)
     if(NOT FORBIDDEN_PLUGIN_CMAKE_POS EQUAL -1)
         message(FATAL_ERROR "PulseAudio/libpulse build path still present: ${FORBIDDEN_PLUGIN_CMAKE_SNIPPET}")
+    endif()
+endforeach()
+
+foreach(REQUIRED_PLUGIN_CMAKE_SNIPPET
+        "add_subdirectory(1g4-mixer)"
+        "set(LIBRARIES \${LIBRARIES} 1g4-mixer)")
+    string(FIND "${VOLUME_PLUGIN_CMAKE_CONTENT}" "${REQUIRED_PLUGIN_CMAKE_SNIPPET}" REQUIRED_PLUGIN_CMAKE_POS)
+    if(REQUIRED_PLUGIN_CMAKE_POS EQUAL -1)
+        message(FATAL_ERROR "Built-in mixer build path is missing: ${REQUIRED_PLUGIN_CMAKE_SNIPPET}")
     endif()
 endforeach()
 
@@ -38,6 +45,15 @@ foreach(FORBIDDEN_VOLUME_SOURCE_SNIPPET
     string(FIND "${ONEG4_VOLUME_SOURCE_CONTENT}" "${FORBIDDEN_VOLUME_SOURCE_SNIPPET}" FORBIDDEN_VOLUME_SOURCE_POS)
     if(NOT FORBIDDEN_VOLUME_SOURCE_POS EQUAL -1)
         message(FATAL_ERROR "PulseAudio/libpulse runtime path still present in oneg4volume.cpp: ${FORBIDDEN_VOLUME_SOURCE_SNIPPET}")
+    endif()
+endforeach()
+
+foreach(REQUIRED_VOLUME_SOURCE_SNIPPET
+        "QDialog* create_1g4_mixer_dialog();"
+        "m_mixerDialog = create_1g4_mixer_dialog();")
+    string(FIND "${ONEG4_VOLUME_SOURCE_CONTENT}" "${REQUIRED_VOLUME_SOURCE_SNIPPET}" REQUIRED_VOLUME_SOURCE_POS)
+    if(REQUIRED_VOLUME_SOURCE_POS EQUAL -1)
+        message(FATAL_ERROR "Built-in mixer runtime path is missing in oneg4volume.cpp: ${REQUIRED_VOLUME_SOURCE_SNIPPET}")
     endif()
 endforeach()
 

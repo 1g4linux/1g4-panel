@@ -52,6 +52,9 @@ if(ONEG4_VOLUME_DEV_TEST_BACKENDS)
   set(MOCS ${MOCS} testaudioengine.h)
 endif()
 
+add_subdirectory(1g4-mixer)
+set(LIBRARIES ${LIBRARIES} 1g4-mixer)
+
 BUILD_ONEG4_PLUGIN(${PLUGIN})
 if(ONEG4_VOLUME_DEV_VERBOSE_LOGGING)
   target_compile_definitions(${PLUGIN} PRIVATE ONEG4_VOLUME_DEV_VERBOSE_LOGGING=1)

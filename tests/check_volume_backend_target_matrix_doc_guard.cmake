@@ -14,13 +14,15 @@ foreach(DOC_CHECK
         "Minimum supported WirePlumber version: 0.5.0."
         "Minimum supported BlueZ version: 5.0."
         "No PulseAudio backend in the final control path."
-        "No libpulse control implementation in the final plugin backend."
+        "No standalone PulseAudio backend selection in plugin configuration."
         "No PulseAudio-specific UX terminology where generic audio terms are sufficient."
+        "The panel \"Mixer\" action opens the built-in mixer dialog (not an external process lookup)."
+        "The built-in mixer dialog links libpulse/libpulse-mainloop-glib for compatibility with PulseAudio and PipeWire's pulse server."
         "Capability detection behavior contract"
         "Missing PipeWire runtime connection:"
         "Missing WirePlumber policy capability:"
         "Missing BlueZ battery/profile/port properties:"
-        "no PulseAudio/libpulse control dependency.")
+        "built-in mixer dialog uses libpulse compatibility libraries.")
     string(FIND "${VOLUME_BACKEND_TARGET_DOC_CONTENT}" "${DOC_CHECK}" DOC_CHECK_POS)
     if(DOC_CHECK_POS EQUAL -1)
         message(FATAL_ERROR "Missing backend target matrix documentation snippet: ${DOC_CHECK}")

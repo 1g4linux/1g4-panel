@@ -17,8 +17,13 @@ This document defines the control-stack target for the volume plugin rewrite.
 ## Non-goals
 
 - No PulseAudio backend in the final control path.
-- No libpulse control implementation in the final plugin backend.
+- No standalone PulseAudio backend selection in plugin configuration.
 - No PulseAudio-specific UX terminology where generic audio terms are sufficient.
+
+## Built-in mixer behavior
+
+- The panel "Mixer" action opens the built-in mixer dialog (not an external process lookup).
+- The built-in mixer dialog links libpulse/libpulse-mainloop-glib for compatibility with PulseAudio and PipeWire's pulse server.
 
 ## Capability detection behavior contract
 
@@ -35,4 +40,4 @@ This document defines the control-stack target for the volume plugin rewrite.
 
 ## Status
 
-- The plugin build/runtime path is restricted to PipeWire + WirePlumber + BlueZ, with no PulseAudio/libpulse control dependency.
+- The plugin control path is restricted to PipeWire + WirePlumber + BlueZ, while the built-in mixer dialog uses libpulse compatibility libraries.

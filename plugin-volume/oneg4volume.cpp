@@ -21,35 +21,12 @@
 #include <OneG4/Notification.h>
 #include <QDialog>
 #include <QLoggingCategory>
-#include <QProcess>
-#include <QStringList>
-#include <QStandardPaths>
+#include <QMessageBox>
 #include <QtGlobal>
 
 #include <algorithm>
 
-namespace {
-
-QString resolveExternalMixerExecutable() {
-  static const QStringList kCandidates{
-      QStringLiteral("pavucontrol-qt"),
-      QStringLiteral("helvum"),
-      QStringLiteral("qpwgraph"),
-      QStringLiteral("pwvucontrol"),
-      QStringLiteral("pavucontrol"),
-  };
-
-  for (const QString& candidate : kCandidates) {
-    const QString executable = QStandardPaths::findExecutable(candidate);
-    if (!executable.isEmpty()) {
-      return executable;
-    }
-  }
-
-  return {};
-}
-
-}  // namespace
+QDialog* create_1g4_mixer_dialog();
 
 OneG4Volume::OneG4Volume(const IOneG4PanelPluginStartupInfo& startupInfo)
     : QObject(),
@@ -58,6 +35,7 @@ OneG4Volume::OneG4Volume(const IOneG4PanelPluginStartupInfo& startupInfo)
       m_defaultSinkId(0U),
       m_defaultSink(nullptr),
       m_configDialog(nullptr),
+      m_mixerDialog(nullptr),
       m_alwaysShowNotifications(SETTINGS_DEFAULT_ALWAYS_SHOW_NOTIFICATIONS) {
   m_volumeButton = new VolumeButton(this);
 
@@ -83,7 +61,9 @@ OneG4Volume::OneG4Volume(const IOneG4PanelPluginStartupInfo& startupInfo)
   settingsChanged();
 }
 
-OneG4Volume::~OneG4Volume() = default;
+OneG4Volume::~OneG4Volume() {
+  delete m_mixerDialog;
+}
 
 void OneG4Volume::setAudioEngine(AudioEngine* engine) {
   if (!engine) {
@@ -274,17 +254,26 @@ void OneG4Volume::openExternalMixer() {
     m_volumeButton->hideVolumeSlider();
   }
 
-  const QString executable = resolveExternalMixerExecutable();
-  if (executable.isEmpty()) {
-    m_notification->setSummary(tr("No external mixer executable found"));
-    m_notification->update();
+  if (!m_engine) {
+    qCWarning(lcVolumeUi) << "OneG4Volume: mixer requested but no audio engine is available";
+    QMessageBox::warning(m_volumeButton, tr("Audio"), tr("No audio engine is available"));
     return;
   }
 
-  if (!QProcess::startDetached(executable, {})) {
-    m_notification->setSummary(tr("Failed to launch external mixer"));
-    m_notification->update();
+  if (!m_mixerDialog) {
+    m_mixerDialog = create_1g4_mixer_dialog();
+    if (!m_mixerDialog) {
+      qCWarning(lcVolumeUi) << "OneG4Volume: failed to create mixer dialog";
+      QMessageBox::warning(m_volumeButton, tr("Audio"), tr("Failed to create mixer dialog"));
+      return;
+    }
+    // Don't parent to volume button to avoid focus issues with panel window.
+    m_mixerDialog->setAttribute(Qt::WA_DeleteOnClose, false);
+    connect(m_mixerDialog, &QObject::destroyed, this, [this] { m_mixerDialog = nullptr; });
   }
+
+  m_mixerDialog->show();
+  m_mixerDialog->raise();
 }
 
 void OneG4Volume::showNotification() const {

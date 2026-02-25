@@ -25,9 +25,7 @@ endif()
 foreach(FORBIDDEN_SUBDIR_CHECK
         "pkg_check_modules(PULSEAUDIO"
         "pulseaudioengine.cpp"
-        "pulseaudioengine.h"
-        "add_subdirectory(1g4-mixer)"
-        "set(LIBRARIES \${LIBRARIES} 1g4-mixer)")
+        "pulseaudioengine.h")
     string(FIND "${VOLUME_PLUGIN_CMAKE_CONTENT}" "${FORBIDDEN_SUBDIR_CHECK}" FORBIDDEN_SUBDIR_CHECK_POS)
     if(NOT FORBIDDEN_SUBDIR_CHECK_POS EQUAL -1)
         message(FATAL_ERROR "Unexpected PulseAudio/libpulse integration remains in plugin-volume/CMakeLists.txt: ${FORBIDDEN_SUBDIR_CHECK}")
@@ -39,7 +37,9 @@ foreach(SUBDIR_CHECK
         "include_directories(SYSTEM \${PIPEWIRE_INCLUDE_DIRS})"
         "set(LIBRARIES \${LIBRARIES} \${PIPEWIRE_LIBRARIES})"
         "set(SOURCES \${SOURCES} pipewireengine.cpp)"
-        "set(HEADERS \${HEADERS} pipewireengine.h)")
+        "set(HEADERS \${HEADERS} pipewireengine.h)"
+        "add_subdirectory(1g4-mixer)"
+        "set(LIBRARIES \${LIBRARIES} 1g4-mixer)")
     string(FIND "${VOLUME_PLUGIN_CMAKE_CONTENT}" "${SUBDIR_CHECK}" SUBDIR_CHECK_POS)
     if(SUBDIR_CHECK_POS EQUAL -1)
         message(FATAL_ERROR "Missing subdirectory integration contract: ${SUBDIR_CHECK}")

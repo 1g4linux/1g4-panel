@@ -13,6 +13,7 @@
 class VolumeButton;
 class AudioEngine;
 class AudioDevice;
+class QDialog;
 namespace OneG4 {
 class Notification;
 }
@@ -45,6 +46,7 @@ class OneG4Volume : public QObject, public IOneG4PanelPlugin {
   QPointer<AudioDevice> m_defaultSink;
   OneG4::Notification* m_notification;
   QPointer<OneG4VolumeConfiguration> m_configDialog;
+  QPointer<QDialog> m_mixerDialog;
   bool m_alwaysShowNotifications;
 };
 
