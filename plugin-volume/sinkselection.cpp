@@ -35,6 +35,12 @@ std::optional<uint> migrateLegacySinkSelection(const QList<uint>& sinkIds,
     return std::nullopt;
   }
 
+  // Keep the default sentinel value stable so "auto select" mode can be
+  // resolved against live backend defaults at runtime.
+  if (legacyIndex == 0) {
+    return std::nullopt;
+  }
+
   if (legacyIndex >= sinkIds.size()) {
     return std::nullopt;
   }
@@ -48,6 +54,12 @@ std::optional<uint> migrateLegacySinkSelection(const QList<uint>& sinkIds,
 }
 
 uint chooseSinkId(const QList<uint>& sinkIds, const QVariant& storedValue) {
+  return chooseSinkId(sinkIds, storedValue, std::nullopt);
+}
+
+uint chooseSinkId(const QList<uint>& sinkIds,
+                  const QVariant& storedValue,
+                  const std::optional<uint>& observedDefaultSinkId) {
   if (sinkIds.isEmpty()) {
     return 0U;
   }
@@ -58,6 +70,10 @@ uint chooseSinkId(const QList<uint>& sinkIds, const QVariant& storedValue) {
     if (sinkIds.contains(sinkId)) {
       return sinkId;
     }
+  }
+
+  if (observedDefaultSinkId.has_value() && sinkIds.contains(observedDefaultSinkId.value())) {
+    return observedDefaultSinkId.value();
   }
 
   return sinkIds.first();

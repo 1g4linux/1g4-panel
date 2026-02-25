@@ -6,9 +6,12 @@
 #define ONEG4VOLUME_H
 
 #include "../panel/ioneg4panelplugin.h"
+#include <QList>
 #include <QToolButton>
 #include <QSlider>
 #include <QPointer>
+
+#include <optional>
 
 class VolumeButton;
 class AudioEngine;
@@ -41,6 +44,10 @@ class OneG4Volume : public QObject, public IOneG4PanelPlugin {
   void openExternalMixer();
 
  private:
+  void setDefaultSink(AudioDevice* sink);
+  std::optional<uint> observedDefaultSinkId() const;
+  AudioDevice* findSinkById(const QList<AudioDevice*>& sinks, uint sinkId) const;
+
   AudioEngine* m_engine;
   VolumeButton* m_volumeButton;
   uint m_defaultSinkId;

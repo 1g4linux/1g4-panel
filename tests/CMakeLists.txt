@@ -109,6 +109,38 @@ add_test(
             $<TARGET_FILE:plugin_volume_configuration_lazy_rebuild_test>
 )
 
+add_executable(plugin_volume_default_sink_sync_test
+    volume_default_sink_sync_test.cpp
+    ${CMAKE_SOURCE_DIR}/plugin-volume/oneg4volume.cpp
+    ${CMAKE_SOURCE_DIR}/plugin-volume/volumebutton.cpp
+    ${CMAKE_SOURCE_DIR}/plugin-volume/volumepopup.cpp
+    ${CMAKE_SOURCE_DIR}/plugin-volume/oneg4volumeconfiguration.cpp
+    ${CMAKE_SOURCE_DIR}/plugin-volume/sinkselection.cpp
+    ${CMAKE_SOURCE_DIR}/plugin-volume/wireplumberpolicy.cpp
+    ${CMAKE_SOURCE_DIR}/plugin-volume/volumelogging.cpp
+    ${CMAKE_SOURCE_DIR}/plugin-volume/audioengine.cpp
+    ${CMAKE_SOURCE_DIR}/plugin-volume/audiodevice.cpp
+    ${CMAKE_SOURCE_DIR}/panel/pluginsettings.cpp
+    ${CMAKE_SOURCE_DIR}/panel/oneg4panelpluginconfigdialog.cpp
+)
+target_include_directories(plugin_volume_default_sink_sync_test
+    PRIVATE
+        ${CMAKE_SOURCE_DIR}
+        ${CMAKE_SOURCE_DIR}/plugin-volume
+        ${CMAKE_SOURCE_DIR}/panel
+)
+target_link_libraries(plugin_volume_default_sink_sync_test PRIVATE Qt6::Core Qt6::Test Qt6::Widgets oneg4-compat)
+
+add_test(
+    NAME plugin_volume_default_sink_sync_test
+    COMMAND ${CMAKE_COMMAND} -E env
+            QT_QPA_PLATFORM=offscreen
+            QT_QPA_PLATFORMTHEME=
+            QT_STYLE_OVERRIDE=Fusion
+            XDG_CURRENT_DESKTOP=
+            $<TARGET_FILE:plugin_volume_default_sink_sync_test>
+)
+
 add_executable(plugin_volume_plugin_load_test
     plugin_volume_plugin_load_test.cpp
     ${CMAKE_SOURCE_DIR}/panel/pluginsettings.cpp

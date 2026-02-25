@@ -15,5 +15,8 @@ std::optional<uint> migrateLegacySinkSelection(const QList<uint>& sinkIds,
                                                bool migrationAlreadyDone);
 
 uint chooseSinkId(const QList<uint>& sinkIds, const QVariant& storedValue);
+uint chooseSinkId(const QList<uint>& sinkIds,
+                  const QVariant& storedValue,
+                  const std::optional<uint>& observedDefaultSinkId);
 
 #endif  // SINKSELECTION_H

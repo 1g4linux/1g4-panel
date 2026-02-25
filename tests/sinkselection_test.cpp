@@ -2,6 +2,8 @@
 
 #include <QtTest/QtTest>
 
+#include <optional>
+
 class SinkSelectionTest : public QObject {
   Q_OBJECT
 
@@ -9,8 +11,12 @@ class SinkSelectionTest : public QObject {
   void migratesLegacyPositionWhenValueDoesNotMatchAnySinkId();
   void doesNotMigrateWhenValueAlreadyMatchesSinkId();
   void doesNotMigrateWhenMigrationAlreadyDone();
+  void doesNotMigrateDefaultSentinelValue();
   void choosesStoredSinkIdWhenPresent();
   void fallsBackToFirstSinkWhenStoredValueIsMissing();
+  void choosesObservedDefaultSinkWhenStoredValueDoesNotMatchAnySinkId();
+  void keepsStoredSinkWhenStoredValueMatchesSinkIdEvenIfObservedDefaultDiffers();
+  void ignoresObservedDefaultWhenNotInCurrentSinkList();
 };
 
 void SinkSelectionTest::migratesLegacyPositionWhenValueDoesNotMatchAnySinkId() {
@@ -35,6 +41,13 @@ void SinkSelectionTest::doesNotMigrateWhenMigrationAlreadyDone() {
   QVERIFY(!migrated.has_value());
 }
 
+void SinkSelectionTest::doesNotMigrateDefaultSentinelValue() {
+  const QList<uint> sinkIds{42U, 77U, 90U};
+  const std::optional<uint> migrated = migrateLegacySinkSelection(sinkIds, QVariant(0), false);
+
+  QVERIFY(!migrated.has_value());
+}
+
 void SinkSelectionTest::choosesStoredSinkIdWhenPresent() {
   const QList<uint> sinkIds{42U, 77U, 90U};
 
@@ -46,6 +59,27 @@ void SinkSelectionTest::fallsBackToFirstSinkWhenStoredValueIsMissing() {
 
   QCOMPARE(chooseSinkId(sinkIds, QVariant(999)), 42U);
   QCOMPARE(chooseSinkId(sinkIds, QVariant(-1)), 42U);
+}
+
+void SinkSelectionTest::choosesObservedDefaultSinkWhenStoredValueDoesNotMatchAnySinkId() {
+  const QList<uint> sinkIds{42U, 77U, 90U};
+  const std::optional<uint> observedDefaultSinkId = 90U;
+
+  QCOMPARE(chooseSinkId(sinkIds, QVariant(999), observedDefaultSinkId), 90U);
+}
+
+void SinkSelectionTest::keepsStoredSinkWhenStoredValueMatchesSinkIdEvenIfObservedDefaultDiffers() {
+  const QList<uint> sinkIds{42U, 77U, 90U};
+  const std::optional<uint> observedDefaultSinkId = 90U;
+
+  QCOMPARE(chooseSinkId(sinkIds, QVariant(42), observedDefaultSinkId), 42U);
+}
+
+void SinkSelectionTest::ignoresObservedDefaultWhenNotInCurrentSinkList() {
+  const QList<uint> sinkIds{42U, 77U, 90U};
+  const std::optional<uint> observedDefaultSinkId = 123U;
+
+  QCOMPARE(chooseSinkId(sinkIds, QVariant(999), observedDefaultSinkId), 42U);
 }
 
 QTEST_MAIN(SinkSelectionTest)
