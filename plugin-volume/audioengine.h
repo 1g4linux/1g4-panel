@@ -82,6 +82,14 @@ class AudioEngine : public QObject {
     bool targetMuted;
   };
 
+  struct CoalescerMetricsSnapshot {
+    quint64 enqueueRequests;
+    quint64 uniqueQueuedEvents;
+    quint64 duplicateEvents;
+    quint64 flushedEventCount;
+    quint64 stateChangedEmits;
+  };
+
   struct StateSnapshot {
     BackendCapabilities capabilities;
     BackendHealthSnapshot backendHealth;
@@ -89,6 +97,7 @@ class AudioEngine : public QObject {
     QList<LogicalEndpointSnapshot> logicalEndpoints;
     QList<StreamSnapshot> streams;
     QList<PendingOperationSnapshot> pendingOperations;
+    CoalescerMetricsSnapshot coalescerMetrics;
   };
 
   struct SinkSnapshot {
@@ -166,6 +175,7 @@ class AudioEngine : public QObject {
   BackendHealthSnapshot m_backendHealth;
   QTimer m_discoveryStateCoalesceTimer;
   QSet<QString> m_pendingCoalescedStateEvents;
+  CoalescerMetricsSnapshot m_coalescerMetrics;
 };
 
 #endif  // AUDIOENGINE_H

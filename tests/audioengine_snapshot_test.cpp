@@ -133,6 +133,7 @@ class AudioEngineSnapshotTest : public QObject {
   void stateChangedSignalCoalescesDiscoveryBursts();
   void stateChangedSignalCoalescesEndpointBurstByKeyAndType();
   void stateChangedSignalCoalescesBackendHealthBurstByKeyAndType();
+  void stateSnapshotTracksCoalescerMetrics();
   void volumeCommitRequestRunsAsynchronously();
   void rapidVolumeBurstFailureRollsBackToPreBurstValue();
   void rapidMuteBurstFailureRollsBackToPreBurstValue();
@@ -335,6 +336,39 @@ void AudioEngineSnapshotTest::stateChangedSignalCoalescesBackendHealthBurstByKey
   const AudioEngine::StateSnapshot state = engine.stateSnapshot();
   QCOMPARE(state.backendHealth.state, AudioEngine::BackendHealthState::Reconnecting);
   QCOMPARE(state.backendHealth.message, QStringLiteral("second"));
+}
+
+void AudioEngineSnapshotTest::stateSnapshotTracksCoalescerMetrics() {
+  SnapshotDummyEngine engine;
+  QSignalSpy stateChangedSpy(&engine, &AudioEngine::stateChanged);
+
+  AudioEngine::StateSnapshot state = engine.stateSnapshot();
+  QCOMPARE(state.coalescerMetrics.enqueueRequests, quint64(0));
+  QCOMPARE(state.coalescerMetrics.uniqueQueuedEvents, quint64(0));
+  QCOMPARE(state.coalescerMetrics.duplicateEvents, quint64(0));
+  QCOMPARE(state.coalescerMetrics.flushedEventCount, quint64(0));
+  QCOMPARE(state.coalescerMetrics.stateChangedEmits, quint64(0));
+
+  engine.emitSinkListChangedForTest();
+  QTRY_COMPARE_WITH_TIMEOUT(stateChangedSpy.count(), 1, 200);
+
+  state = engine.stateSnapshot();
+  QCOMPARE(state.coalescerMetrics.enqueueRequests, quint64(1));
+  QCOMPARE(state.coalescerMetrics.uniqueQueuedEvents, quint64(1));
+  QCOMPARE(state.coalescerMetrics.duplicateEvents, quint64(0));
+  QCOMPARE(state.coalescerMetrics.flushedEventCount, quint64(1));
+  QCOMPARE(state.coalescerMetrics.stateChangedEmits, quint64(1));
+
+  engine.emitSinkListChangedForTest();
+  engine.emitSinkListChangedForTest();
+  QTRY_COMPARE_WITH_TIMEOUT(stateChangedSpy.count(), 2, 200);
+
+  state = engine.stateSnapshot();
+  QCOMPARE(state.coalescerMetrics.enqueueRequests, quint64(3));
+  QCOMPARE(state.coalescerMetrics.uniqueQueuedEvents, quint64(2));
+  QCOMPARE(state.coalescerMetrics.duplicateEvents, quint64(1));
+  QCOMPARE(state.coalescerMetrics.flushedEventCount, quint64(2));
+  QCOMPARE(state.coalescerMetrics.stateChangedEmits, quint64(2));
 }
 
 void AudioEngineSnapshotTest::volumeCommitRequestRunsAsynchronously() {

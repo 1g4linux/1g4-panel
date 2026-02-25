@@ -9,6 +9,7 @@
 #include "../panel/pluginsettings.h"
 
 #include <QList>
+#include <QPointer>
 #include <memory>
 
 #define SETTINGS_MUTE_ON_MIDDLECLICK "showOnMiddleClick"
@@ -27,6 +28,7 @@
 #define SETTINGS_DEFAULT_ALWAYS_SHOW_NOTIFICATIONS false
 
 class AudioDevice;
+class QShowEvent;
 class QTreeWidgetItem;
 class WirePlumberPolicy;
 
@@ -52,6 +54,9 @@ class OneG4VolumeConfiguration : public OneG4PanelPluginConfigDialog {
   void policyItemChanged(QTreeWidgetItem* item, int column);
   void applyPolicy();
 
+ protected:
+  void showEvent(QShowEvent* event) override;
+
  protected slots:
   virtual void loadSettings();
 
@@ -60,8 +65,11 @@ class OneG4VolumeConfiguration : public OneG4PanelPluginConfigDialog {
   bool mLockSettingChanges;
   bool mUpdatingPolicyTree;
   bool mPolicyDirty;
+  bool mHasDeferredSinkList;
+  QList<QPointer<AudioDevice>> mDeferredSinkList;
   std::unique_ptr<WirePlumberPolicy> m_policy;
 
+  void applySinkListToUi(const QList<AudioDevice*>& sinks);
   void rebuildPolicyTree(const QList<AudioDevice*>& sinks);
   static QString deriveCardName(const QString& deviceName);
   void setPolicyDirty(bool dirty);

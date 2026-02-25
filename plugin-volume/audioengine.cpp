@@ -83,6 +83,13 @@ AudioEngine::AudioEngine(QObject* parent)
           BackendHealthState::Unknown,
           0U,
           QString(),
+      },
+      m_coalescerMetrics{
+          0U,
+          0U,
+          0U,
+          0U,
+          0U,
       } {
   m_discoveryStateCoalesceTimer.setSingleShot(true);
   m_discoveryStateCoalesceTimer.setInterval(kStateChangedCoalesceIntervalMs);
@@ -220,6 +227,7 @@ AudioEngine::StateSnapshot AudioEngine::stateSnapshot() const {
             [](const PendingOperationSnapshot& left, const PendingOperationSnapshot& right) {
               return left.operationId < right.operationId;
             });
+  snapshot.coalescerMetrics = m_coalescerMetrics;
 
   return snapshot;
 }
@@ -451,6 +459,8 @@ void AudioEngine::queueStateChangedFromDiscovery() {
 }
 
 void AudioEngine::queueStateChangedByObjectAndType(const QString& objectKey, CoalescedStateEventType eventType) {
+  ++m_coalescerMetrics.enqueueRequests;
+
   QString stableObjectKey = objectKey.trimmed();
   if (stableObjectKey.isEmpty()) {
     stableObjectKey = QStringLiteral("global");
@@ -458,7 +468,14 @@ void AudioEngine::queueStateChangedByObjectAndType(const QString& objectKey, Coa
 
   const QString eventKey =
       QStringLiteral("%1|%2").arg(stableObjectKey, QString::number(static_cast<int>(eventType)));
+  const qsizetype previousSize = m_pendingCoalescedStateEvents.size();
   m_pendingCoalescedStateEvents.insert(eventKey);
+  if (m_pendingCoalescedStateEvents.size() == previousSize + 1) {
+    ++m_coalescerMetrics.uniqueQueuedEvents;
+  }
+  else {
+    ++m_coalescerMetrics.duplicateEvents;
+  }
 
   if (!m_discoveryStateCoalesceTimer.isActive()) {
     m_discoveryStateCoalesceTimer.start();
@@ -470,6 +487,8 @@ void AudioEngine::flushDeferredStateChanged() {
     return;
   }
 
+  m_coalescerMetrics.flushedEventCount += static_cast<quint64>(m_pendingCoalescedStateEvents.size());
+  ++m_coalescerMetrics.stateChangedEmits;
   m_pendingCoalescedStateEvents.clear();
   emit stateChanged();
 }

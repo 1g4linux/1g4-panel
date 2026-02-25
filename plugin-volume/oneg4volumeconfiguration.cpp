@@ -15,6 +15,7 @@
 #include <QDialogButtonBox>
 #include <QMessageBox>
 #include <QPushButton>
+#include <QShowEvent>
 #include <QSpinBox>
 #include <QTreeWidget>
 #include <QTreeWidgetItem>
@@ -27,6 +28,7 @@ OneG4VolumeConfiguration::OneG4VolumeConfiguration(PluginSettings* settings, boo
       mLockSettingChanges(false),
       mUpdatingPolicyTree(false),
       mPolicyDirty(false),
+      mHasDeferredSinkList(false),
 #ifdef ONEG4_VOLUME_ENABLE_WIREPLUMBER_POLICY
       m_policy(std::make_unique<WirePlumberPolicy>()) {
 #else
@@ -68,6 +70,41 @@ OneG4VolumeConfiguration::~OneG4VolumeConfiguration() {
 }
 
 void OneG4VolumeConfiguration::setSinkList(const QList<AudioDevice*> sinks) {
+  if (!isVisible()) {
+    mDeferredSinkList.clear();
+    mDeferredSinkList.reserve(sinks.size());
+    for (AudioDevice* sink : sinks) {
+      mDeferredSinkList.append(QPointer<AudioDevice>(sink));
+    }
+    mHasDeferredSinkList = true;
+    return;
+  }
+
+  mHasDeferredSinkList = false;
+  mDeferredSinkList.clear();
+  applySinkListToUi(sinks);
+}
+
+void OneG4VolumeConfiguration::showEvent(QShowEvent* event) {
+  OneG4PanelPluginConfigDialog::showEvent(event);
+  if (!mHasDeferredSinkList) {
+    return;
+  }
+
+  QList<AudioDevice*> sinks;
+  sinks.reserve(mDeferredSinkList.size());
+  for (const QPointer<AudioDevice>& sink : std::as_const(mDeferredSinkList)) {
+    if (sink) {
+      sinks.append(sink.data());
+    }
+  }
+
+  mHasDeferredSinkList = false;
+  mDeferredSinkList.clear();
+  applySinkListToUi(sinks);
+}
+
+void OneG4VolumeConfiguration::applySinkListToUi(const QList<AudioDevice*>& sinks) {
   const QVariant storedSinkSetting = settings().value(QStringLiteral(SETTINGS_DEVICE), SETTINGS_DEFAULT_DEVICE);
 
   const bool oldBlock = ui->devAddedCombo->blockSignals(true);

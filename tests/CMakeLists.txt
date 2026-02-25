@@ -38,6 +38,50 @@ add_test(
     COMMAND plugin_volume_audioengine_snapshot_test
 )
 
+add_executable(plugin_volume_volumepopup_drag_test
+    volumepopup_drag_test.cpp
+    ${CMAKE_SOURCE_DIR}/plugin-volume/volumepopup.cpp
+    ${CMAKE_SOURCE_DIR}/plugin-volume/audioengine.cpp
+    ${CMAKE_SOURCE_DIR}/plugin-volume/audiodevice.cpp
+    ${CMAKE_SOURCE_DIR}/OneG4/XdgIcon.cpp
+)
+target_include_directories(plugin_volume_volumepopup_drag_test PRIVATE ${CMAKE_SOURCE_DIR} ${CMAKE_SOURCE_DIR}/plugin-volume)
+target_link_libraries(plugin_volume_volumepopup_drag_test PRIVATE Qt6::Core Qt6::Test Qt6::Widgets)
+
+add_test(
+    NAME plugin_volume_volumepopup_drag_test
+    COMMAND ${CMAKE_COMMAND} -E env
+            QT_QPA_PLATFORM=offscreen
+            $<TARGET_FILE:plugin_volume_volumepopup_drag_test>
+)
+
+add_executable(plugin_volume_configuration_lazy_rebuild_test
+    volumeconfiguration_lazy_rebuild_test.cpp
+    ${CMAKE_SOURCE_DIR}/plugin-volume/oneg4volumeconfiguration.cpp
+    ${CMAKE_SOURCE_DIR}/plugin-volume/sinkselection.cpp
+    ${CMAKE_SOURCE_DIR}/plugin-volume/wireplumberpolicy.cpp
+    ${CMAKE_SOURCE_DIR}/plugin-volume/volumelogging.cpp
+    ${CMAKE_SOURCE_DIR}/plugin-volume/audioengine.cpp
+    ${CMAKE_SOURCE_DIR}/plugin-volume/audiodevice.cpp
+    ${CMAKE_SOURCE_DIR}/panel/pluginsettings.cpp
+    ${CMAKE_SOURCE_DIR}/panel/oneg4panelpluginconfigdialog.cpp
+    ${CMAKE_SOURCE_DIR}/OneG4/Settings.cpp
+)
+target_include_directories(plugin_volume_configuration_lazy_rebuild_test
+    PRIVATE
+        ${CMAKE_SOURCE_DIR}
+        ${CMAKE_SOURCE_DIR}/plugin-volume
+        ${CMAKE_SOURCE_DIR}/panel
+)
+target_link_libraries(plugin_volume_configuration_lazy_rebuild_test PRIVATE Qt6::Core Qt6::Test Qt6::Widgets oneg4-compat)
+
+add_test(
+    NAME plugin_volume_configuration_lazy_rebuild_test
+    COMMAND ${CMAKE_COMMAND} -E env
+            QT_QPA_PLATFORM=offscreen
+            $<TARGET_FILE:plugin_volume_configuration_lazy_rebuild_test>
+)
+
 add_executable(plugin_volume_plugin_load_test
     plugin_volume_plugin_load_test.cpp
     ${CMAKE_SOURCE_DIR}/panel/pluginsettings.cpp

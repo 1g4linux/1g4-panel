@@ -28,7 +28,10 @@ VolumePopup::VolumePopup(QWidget* parent)
           Qt::Dialog | Qt::WindowStaysOnTopHint | Qt::CustomizeWindowHint | Qt::Popup | Qt::X11BypassWindowManagerHint),
       m_pos(0, 0),
       m_anchor(Qt::TopLeftCorner),
-      m_device(nullptr) {
+      m_device(nullptr),
+      m_sliderDragActive(false),
+      m_hasDeferredBackendVolume(false),
+      m_deferredBackendVolumePercent(0) {
   m_volumeSlider = new QSlider(Qt::Vertical, this);
   m_volumeSlider->setTickPosition(QSlider::TicksBothSides);
   m_volumeSlider->setTickInterval(10);
@@ -57,6 +60,8 @@ VolumePopup::VolumePopup(QWidget* parent)
   layout->addWidget(m_muteToggleButton, 0, Qt::AlignHCenter);
 
   connect(m_volumeSlider, &QSlider::valueChanged, this, &VolumePopup::handleSliderValueChanged);
+  connect(m_volumeSlider, &QSlider::sliderPressed, this, &VolumePopup::handleSliderPressed);
+  connect(m_volumeSlider, &QSlider::sliderReleased, this, &VolumePopup::handleSliderReleased);
   connect(m_muteToggleButton, &QPushButton::clicked, this, &VolumePopup::handleMuteToggleClicked);
   connect(m_externalMixerButton, &QPushButton::clicked, this, &VolumePopup::handleExternalMixerClicked);
 }
@@ -90,10 +95,31 @@ void VolumePopup::handleSliderValueChanged(int value) {
     return;
   }
 
+  if (m_sliderDragActive || m_volumeSlider->isSliderDown()) {
+    // User motion during a drag supersedes any older deferred backend value.
+    m_hasDeferredBackendVolume = false;
+  }
+
   m_device->setVolume(value);
   m_volumeSlider->setToolTip(QStringLiteral("%1%").arg(value));
 
   QTimer::singleShot(0, this, [this] { QToolTip::showText(QCursor::pos(), m_volumeSlider->toolTip(), this); });
+}
+
+void VolumePopup::handleSliderPressed() {
+  m_sliderDragActive = true;
+}
+
+void VolumePopup::handleSliderReleased() {
+  m_sliderDragActive = false;
+  if (!m_hasDeferredBackendVolume) {
+    return;
+  }
+
+  const int deferredVolume = m_deferredBackendVolumePercent;
+  m_hasDeferredBackendVolume = false;
+  applyVolumeToSlider(deferredVolume);
+  updateStockIcon();
 }
 
 void VolumePopup::handleMuteToggleClicked() {
@@ -109,16 +135,15 @@ void VolumePopup::handleExternalMixerClicked() {
 }
 
 void VolumePopup::handleDeviceVolumeChanged(int volume) {
-  m_volumeSlider->blockSignals(true);
-  m_volumeSlider->setValue(volume);
-  m_volumeSlider->setToolTip(QStringLiteral("%1%").arg(volume));
-
-  if (auto* parent = parentWidget()) {
-    parent->setToolTip(m_volumeSlider->toolTip());
+  const int boundedVolume = qBound(0, volume, 100);
+  if (m_sliderDragActive || m_volumeSlider->isSliderDown()) {
+    m_deferredBackendVolumePercent = boundedVolume;
+    m_hasDeferredBackendVolume = true;
+    updateStockIcon();
+    return;
   }
 
-  m_volumeSlider->blockSignals(false);
-
+  applyVolumeToSlider(boundedVolume);
   updateStockIcon();
 }
 
@@ -185,6 +210,9 @@ void VolumePopup::setDevice(AudioDevice* device) {
   }
 
   m_device = device;
+  m_sliderDragActive = false;
+  m_hasDeferredBackendVolume = false;
+  m_deferredBackendVolumePercent = 0;
 
   if (auto* dev = m_device.data()) {
     m_muteToggleButton->setChecked(dev->mute());
@@ -212,6 +240,17 @@ void VolumePopup::setDevice(AudioDevice* device) {
 void VolumePopup::setSliderStep(int step) {
   m_volumeSlider->setSingleStep(step);
   m_volumeSlider->setPageStep(step * 10);
+}
+
+void VolumePopup::applyVolumeToSlider(int volume) {
+  m_volumeSlider->blockSignals(true);
+  m_volumeSlider->setValue(volume);
+  m_volumeSlider->setToolTip(QStringLiteral("%1%").arg(volume));
+  m_volumeSlider->blockSignals(false);
+
+  if (auto* parent = parentWidget()) {
+    parent->setToolTip(m_volumeSlider->toolTip());
+  }
 }
 
 void VolumePopup::realign() {

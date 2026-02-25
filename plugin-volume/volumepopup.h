@@ -44,6 +44,8 @@ class VolumePopup : public QDialog {
 
  private slots:
   void handleSliderValueChanged(int value);
+  void handleSliderPressed();
+  void handleSliderReleased();
   void handleMuteToggleClicked();
   void handleExternalMixerClicked();
   void handleDeviceVolumeChanged(int volume);
@@ -52,6 +54,7 @@ class VolumePopup : public QDialog {
  private:
   void realign();
   void updateStockIcon();
+  void applyVolumeToSlider(int volume);
 
   QSlider* m_volumeSlider;
   QPushButton* m_muteToggleButton;
@@ -59,6 +62,9 @@ class VolumePopup : public QDialog {
   QPoint m_pos;
   Qt::Corner m_anchor;
   QPointer<AudioDevice> m_device;
+  bool m_sliderDragActive;
+  bool m_hasDeferredBackendVolume;
+  int m_deferredBackendVolumePercent;
 };
 
 #endif  // VOLUMEPOPUP_H
