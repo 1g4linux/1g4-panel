@@ -52,6 +52,9 @@ add_test(
     NAME plugin_volume_volumepopup_drag_test
     COMMAND ${CMAKE_COMMAND} -E env
             QT_QPA_PLATFORM=offscreen
+            QT_QPA_PLATFORMTHEME=
+            QT_STYLE_OVERRIDE=Fusion
+            XDG_CURRENT_DESKTOP=
             $<TARGET_FILE:plugin_volume_volumepopup_drag_test>
 )
 
@@ -79,6 +82,9 @@ add_test(
     NAME plugin_volume_configuration_lazy_rebuild_test
     COMMAND ${CMAKE_COMMAND} -E env
             QT_QPA_PLATFORM=offscreen
+            QT_QPA_PLATFORMTHEME=
+            QT_STYLE_OVERRIDE=Fusion
+            XDG_CURRENT_DESKTOP=
             $<TARGET_FILE:plugin_volume_configuration_lazy_rebuild_test>
 )
 
@@ -96,6 +102,9 @@ add_test(
     COMMAND ${CMAKE_COMMAND} -E env
             ONEG4_VOLUME_PLUGIN_PATH=$<TARGET_FILE:volume>
             ONEG4_VOLUME_DESKTOP_PATH=${CMAKE_SOURCE_DIR}/plugin-volume/resources/volume.desktop.in
+            QT_QPA_PLATFORMTHEME=
+            QT_STYLE_OVERRIDE=Fusion
+            XDG_CURRENT_DESKTOP=
             $<TARGET_FILE:plugin_volume_plugin_load_test>
 )
 
