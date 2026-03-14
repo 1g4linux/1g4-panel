@@ -29,10 +29,8 @@ class VolumeButton : public QToolButton {
   void deviceChanged();
 
  protected:
-  void enterEvent(QEnterEvent* event) override;
   void wheelEvent(QWheelEvent* event) override;
   void mouseReleaseEvent(QMouseEvent* event) override;
-  void mouseMoveEvent(QMouseEvent* event) override;
 
  private slots:
   void toggleVolumeSlider();

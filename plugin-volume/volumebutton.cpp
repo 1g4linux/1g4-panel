@@ -7,7 +7,6 @@
 #include "audiodevice.h"
 #include "volumepopup.h"
 
-#include <QEnterEvent>
 #include <QMouseEvent>
 #include <QRect>
 #include <QSizePolicy>
@@ -49,20 +48,6 @@ void VolumeButton::setMuteOnMiddleClick(bool state) {
   m_muteOnMiddleClick = state;
 }
 
-void VolumeButton::enterEvent(QEnterEvent* event) {
-  if (!toolTip().isEmpty()) {
-    QToolTip::showText(event->globalPosition().toPoint(), toolTip(), this);
-  }
-}
-
-void VolumeButton::mouseMoveEvent(QMouseEvent* event) {
-  QToolButton::mouseMoveEvent(event);
-
-  if (!toolTip().isEmpty() && !QToolTip::isVisible()) {
-    QToolTip::showText(event->globalPosition().toPoint(), toolTip(), this);
-  }
-}
-
 void VolumeButton::wheelEvent(QWheelEvent* event) {
   if (!m_volumePopup) {
     return;
@@ -101,13 +86,14 @@ void VolumeButton::showVolumeSlider() {
   }
 
   m_popupHideTimer.stop();
+  QToolTip::hideText();
   m_volumePopup->updateGeometry();
   m_volumePopup->adjustSize();
 
   const QRect pos = mPlugin->calculatePopupWindowPos(m_volumePopup->size());
   mPlugin->willShowWindow(m_volumePopup);
   m_volumePopup->openAt(pos.topLeft(), Qt::TopLeftCorner);
-  m_volumePopup->activateWindow();
+  m_volumePopup->raise();
 }
 
 void VolumeButton::hideVolumeSlider() {

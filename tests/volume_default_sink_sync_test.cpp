@@ -137,6 +137,7 @@ class VolumeDefaultSinkSyncTest : public QObject {
   void autoSelectionTracksObservedDefaultSink();
   void explicitSelectionOverridesObservedDefaultSink();
   void observedDefaultInputTracksPopupInputDevice();
+  void firstClickOnVolumeButtonKeepsPopupVisible();
 };
 
 void VolumeDefaultSinkSyncTest::autoSelectionTracksObservedDefaultSink() {
@@ -249,6 +250,43 @@ void VolumeDefaultSinkSyncTest::observedDefaultInputTracksPopupInputDevice() {
   QTRY_COMPARE_WITH_TIMEOUT(plugin.m_defaultSource->index(), 202U, 300);
   QVERIFY(plugin.m_volumeButton->volumePopup()->inputDevice() != nullptr);
   QCOMPARE(plugin.m_volumeButton->volumePopup()->inputDevice()->index(), 202U);
+}
+
+void VolumeDefaultSinkSyncTest::firstClickOnVolumeButtonKeepsPopupVisible() {
+  QTemporaryDir tempDir;
+  QVERIFY(tempDir.isValid());
+
+  const QString settingsPath = tempDir.filePath(QStringLiteral("panel-test.ini"));
+  OneG4::Settings settings(settingsPath, QSettings::IniFormat);
+  std::unique_ptr<PluginSettings> pluginSettings(
+      PluginSettingsFactory::create(&settings, QStringLiteral("volume-test"), &settings));
+  QVERIFY(pluginSettings != nullptr);
+
+  pluginSettings->setValue(QStringLiteral(SETTINGS_DEVICE), SETTINGS_DEFAULT_DEVICE);
+  pluginSettings->setValue(QStringLiteral(SETTINGS_AUDIO_ENGINE), QStringLiteral("UnknownBackend"));
+
+  VolumeDefaultSyncDummyPanel panel;
+  const IOneG4PanelPluginStartupInfo startupInfo{&panel, pluginSettings.get(), nullptr};
+  OneG4Volume plugin(startupInfo);
+
+  auto* engine = new VolumeDefaultSyncDummyEngine;
+  engine->addSink(QStringLiteral("alsa_output.primary"), QStringLiteral("Primary Output"), 10U);
+  plugin.setAudioEngine(engine);
+
+  QVERIFY(plugin.m_volumeButton != nullptr);
+  QVERIFY(plugin.m_volumeButton->volumePopup() != nullptr);
+  QVERIFY(plugin.m_volumeButton->volumePopup()->device() != nullptr);
+
+  plugin.m_volumeButton->show();
+  QVERIFY(QTest::qWaitForWindowActive(plugin.m_volumeButton) || plugin.m_volumeButton->isVisible());
+
+  const QPoint center = plugin.m_volumeButton->rect().center();
+  QTest::mouseMove(plugin.m_volumeButton, center);
+  QCoreApplication::processEvents();
+
+  QTest::mouseClick(plugin.m_volumeButton, Qt::LeftButton, Qt::NoModifier, center);
+
+  QTRY_VERIFY_WITH_TIMEOUT(plugin.m_volumeButton->volumePopup()->isVisible(), 300);
 }
 
 QTEST_MAIN(VolumeDefaultSinkSyncTest)
